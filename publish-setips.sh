@@ -1,17 +1,16 @@
 #!/bin/bash
-eventID="Operation RED TEAM"
 wikiServer="127.0.0.1"
 date=`date +"%Y%b%d-%H%M"`
-webserversetipsdir="$webserversetipsdir"
+webserversetipsdir="/www/html/current-wiki/linux"
 printf "Enter version (beta or #): "; read versionnum
-eventversion="$eventID.$versionnum ($date)"
+eventversion="$versionnum ($date)"
 # Copy setips.nightly to tmp file
 cp setips.nightly setips.tmp
 # Add current verison to setips.sh script
 awk 'BEGIN{OFS=FS=" "} $1~/version=BETA/ {$1="version='"'$eventversion'"'";}1' setips.tmp > tmp; mv tmp setips.tmp
 # Copy setips-releasenotes to tmp file
 cp setips-releasenotes.md setips-releasenotes.tmp
-# Add current verison to Release Notes
+# Add current version to Release Notes
 awk '/Current/{print;print "Version: '"'$eventversion'"'";next}1' setips-releasenotes.tmp > tmp; mv tmp setips-releasenotes.tmp
 # Ask for the version
 if [[ $versionnum = "" ]]; then
@@ -48,7 +47,7 @@ rm setips.tmp setips-releasenotes.tmp > /dev/null 2>&1
 : <<'END'
 Testing:
 - - - -
-eventID="FLUFFY BUNNY"
+eventID="Operation RED TEAM"
 date=`date +"%Y%b%d-%H%M"`
 printf "Enter version (beta or #): "; read versionnum
 
