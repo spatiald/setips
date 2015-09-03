@@ -301,7 +301,7 @@ function initialSetup {
 		netmask=`ipcalc -c 13 | grep Address | awk '{ print $2 }'`
 		echo "netmask $netmask" >> /etc/network/interfaces
         fi
-	gatewayip=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+	gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 	echo "gateway $gatewayip" >> /etc/network/interfaces
 	dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
 	echo "dns-nameservers $dns" >> /etc/network/interfaces
