@@ -323,32 +323,33 @@ function initialSetup {
 
 # Set default gateway
 function setGateway {
-	if [[ $setGateway == "" ]]; then
-		gatewayip=$currentgw
-		if [ -z ${currentgw:+x} ]; then
-			echo; echo "[!] You do not have a default gateway set.";
+	currentgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+	gatewayip=$currentgw
+	if [ -z ${currentgw:+x} ]; then
+		echo; echo "[!] You do not have a default gateway set.";
+	else
+		echo; echo "[-] Your current gateway is:  $gatewayip";
+	fi
+	echo; read -p "[?] Do you want to change your gateway? (y/n)" -n 1 -r
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		echo; echo "[?] What is the IP of the gateway?"; read gatewayip || return
+		# Remove current gw
+		route del default gw $currentgw
+		# Add new gw
+		route add default gw $gatewayip
+		newgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+
+#		newgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+		if [ -z ${newgw:+x} ]; then
+			echo; echo "[!] Something went wrong...check your desired gateway.";
 		else
-			echo; echo "[-] Your current gateway is:  $gatewayip";
+			echo; echo "[+] Your gateway was updated to:  $newgw"; echo
+			# Print current routing table
+			route -n; echo
+			echo; echo "[+] Your gateway was set.";
 		fi
-		echo; read -p "[?] Do you want to change your gateway? (y/n)" -n 1 -r
-		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			echo; echo "[?] What is the IP of the gateway?"; read gatewayip || return
-			# Remove current gw
-			route del default gw $currentgw
-			# Add new gw
-			route add default gw $gatewayip
-			newgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-			if [ -z ${newgw:+x} ]; then
-				echo; echo "[!] Something went wrong...check your desired gateway.";
-			else
-				echo; echo "[+] Your gateway was updated to:  $newgw"; echo
-				# Print current routing table
-				route -n; echo
-				echo; echo "[+] Your gateway was set.";
-			fi
-		else
-			echo; echo "[!] Gateway not changed.";
-		fi
+	else
+		echo; echo "[!] Gateway not changed.";
 	fi
 }
 
