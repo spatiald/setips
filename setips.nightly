@@ -14,7 +14,7 @@
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Variables - change them if you want to
-version=BETA
+version=BETA2
 currentDateTime=`date +"%Y%b%d-%H%M"`
 defaultMTU=1300 # Normal is 1500
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
