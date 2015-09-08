@@ -251,8 +251,8 @@ function checkForSubinterfaces {
 			addSubInts
 		fi
 	else
-		echo; read -p "[?] Do you want to use your current subinterface IPs? (y/n) " -n 1 -r
-		if [[ $REPLY =~ ^[Nn]$ ]]; then
+		echo; read -p "[?] Do you want to change your current subinterface IPs? (y/n) " -n 1 -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			removeSubInts
 			addSubInts
 		fi
@@ -451,8 +451,21 @@ function setupSOCKS {
 	else
 		echo "[!] SSH server *is not* running; starting it up."
 		service ssh start
+		echo; echo "[-] Checking if the SSH server is running after we attempted to start it up..."
+		if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
+			echo "[+] SSH server *is* running; let's rock."
+		else
+			echo "[!] SSH server *is not* running. #sadpanda"
+			break
+		fi
 	fi
-	echo "[+] Setting up the SSH SOCKS proxy...please wait..."
+
+	if cat /etc/ssh/sshd_config | grep "without-password" | grep -v '"PermitRootLogin without-password"' > /dev/null; then
+		echo; echo "[!] I have to fix your sshd_config file to allow login with password."
+		fixSSHConfigRoot
+	fi
+
+	echo; echo "[+] Setting up the SSH SOCKS proxy...please wait..."
 	sshPort=`netstat -antp | grep "sshd" | head -n 1 | cut -d":" -f2| cut -d" " -f1`
 	while :; do
 		(sleep 2; echo $password; sleep 2; echo ""; sleep 1) | socat - EXEC:"screen -S ssh ssh -o StrictHostKeyChecking=no -gD$proxyport -p $sshPort -l root localhost",pty,setsid,ctty > /dev/null
@@ -479,11 +492,14 @@ function setupSOCKS {
 	else
 		rm -rf /tmp/ssh.tmp;
 	fi
+	echo
 }
 
 # Stop SOCKS proxy
 function stopSOCKS {
-	screen -X -S ssh kill
+	screen -ls |grep ssh|cut -d"." -f1|cut -b2- > /tmp/socks.tmp
+	while read p; do screen -X -S $p.ssh kill; done < /tmp/socks.tmp
+	rm -f /tmp/socks.tmp
 	sed -i '/screen/d' /etc/rc.local
 }
 
@@ -516,7 +532,12 @@ function removeStartIPTables {
 
 # Display the current IPTables list
 function displayIPTables {
-	iptables-save
+	if [[ -z `iptables-save` ]]; then
+		echo; echo "[!] There are no IPTable rules."
+	else
+		echo; echo "[+] Displaying your current IPTables rules:"
+		echo; iptables-save
+	fi
 }
 
 # Setup IPTables SRC NAT Pivot
@@ -944,6 +965,9 @@ function printHelp {
 
 # MAIN MENU
 echo; echo "Setips Script - Version $version"
+# Check /etc/rc.local for the execute bit
+chmod +x /etc/rc.local
+
 if [[ $1 = "" || $1 = "--help" ]]; then
 	printHelp >&2
 	exit 1
@@ -1003,7 +1027,7 @@ else
 			interactiveMode >&2
 			;;
 		(l) # List current IPTables rules
-			iptables-save >&2
+			displayIPTables >&2
 			;;
 		(r) # REPAIR - quick repair; doesn't hurt if run multiple times.
 			echo "[+] Cleaning up/repair the current IPTables ruleset."
@@ -1171,6 +1195,3 @@ else
 		fi
 	done
 fi
-
-# Check /etc/rc.local for the execute bit
-chmod +x /etc/rc.local
