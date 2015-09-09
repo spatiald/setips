@@ -991,6 +991,7 @@ else
 			eval tgtip=\$$OPTINDplus2
 			eval tgtport=\$$OPTINDplus3
 			$iptables -t nat -D PREROUTING -p $protocol -d $subintip --dport $subintport -j DNAT --to-destination $tgtip:$tgtport
+			echo; echo "[+] Deleted rule specified."
 			saveIPTables >&2
 			echo
 			sc=4 #5 args
@@ -1015,6 +1016,7 @@ else
 				echo "$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport"
 				$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
 			done <$srcnatfile
+			echo; echo "[+] Imported rules from file:  $srcnatfile"
 			cleanIPTables >&2
 			saveIPTables >&2
 			echo
@@ -1061,6 +1063,7 @@ else
 			$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
 			$iptables -t filter -I FORWARD 1 -j ACCEPT
 			randomizePivotIP >&2
+			echo "[+] Imported rule specified."
 			cleanIPTables >&2
 			saveIPTables >&2
 			echo
