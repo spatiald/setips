@@ -861,6 +861,13 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				Remove-auto-set-IPTables-on-startup )
 				removeStartIPTables
   				echo; echo "[+] Removed iptables auto-set script."
+				echo; read -p "[?] Would you like to flush the current iptable rules? (y/n)" -n 1 -r
+				if [[ $REPLY =~ ^[Yy]$ ]]; then
+					echo; read -p "[?] ARE YOU SURE? (y/n)" -n 1 -r
+					if [[ $REPLY =~ ^[Yy]$ ]]; then
+						flushIPTables
+					fi
+				fi
 				break
 				;;
 
