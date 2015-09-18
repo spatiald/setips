@@ -39,6 +39,7 @@ snortRulesFile="snort.rules"
 snortRulesDirectory="/root/snort-rules"
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile"
 setipsUpdateFileDownloadLocation="/root/setips.sh"
+downloadError="0"
 
 # Fix backspace
 stty sane
@@ -53,6 +54,23 @@ iptables=`which iptables`
 
 #in case you wish to kill it
 trap 'exit 3' 1 2 3 15
+
+function printGood () {
+    echo -e "\x1B[01;32m[+]\x1B[0m $1"
+}
+
+function printError () {
+    echo -e "\x1B[01;31m[-]\x1B[0m $1"
+}
+
+function printStatus () {
+    echo -e "\x1B[01;35m[*]\x1B[0m $1"
+}
+
+function printQuestion () {
+    echo -e "\x1B[01;33m[?]\x1B[0m $1"
+}
+
 
 # Setup backup folder for saving setips scripts/backup files
 if [[ ! -d "$setipsFolder" ]]; then
@@ -69,6 +87,120 @@ if [[ -f "/root/ips-saved.txt" ]]; then
 		mv /ips-saved.txt /ips-archive.txt $setipsFolder > /dev/null 2>&1
 	fi
 fi
+
+# Test function
+function testingScript () {
+    set -x
+    trap ctrlC INT
+
+    downloadError="0"
+    if [[ $INTERNET == "0" ]]; then cd $DIRCONTENTOFFLINE; else cd $RACHELTMPDIR; fi
+
+    exit 1
+}
+
+function opMode () {
+    trap ctrlC INT
+    echo; printQuestion "Do you want to run in ONLINE or OFFLINE mode?"
+    select MODE in "ONLINE" "OFFLINE"; do
+        case $MODE in
+        # ONLINE
+        ONLINE)
+            echo; printGood "Script set for 'ONLINE' mode."
+            INTERNET="1"
+            onlineVariables
+            checkInternet
+            break
+        ;;
+        # OFFLINE
+        OFFLINE)
+            echo; printGood "Script set for 'OFFLINE' mode."
+            INTERNET="0"
+            offlineVariables
+            echo; printQuestion "The OFFLINE RACHEL content folder is set to:  $DIRCONTENTOFFLINE"
+            read -p "Do you want to change the default location? (y/n) " -r <&1
+            if [[ $REPLY =~ ^[yY][eE][sS]|[yY]$ ]]; then
+                echo; printQuestion "What is the location of your content folder? "; read DIRCONTENTOFFLINE
+            fi
+            if [[ ! -d $DIRCONTENTOFFLINE ]]; then
+                printError "The folder location does not exist!  Please identify the full path to your OFFLINE content folder and try again."
+                rm -rf $INSTALLTMPDIR $RACHELTMPDIR
+                exit 1
+            else
+                export DIRCONTENTOFFLINE
+                offlineVariables
+            fi
+            break
+        ;;
+        esac
+        printGood "Done."
+        break
+    done
+}
+
+function onlineVariables () {
+
+}
+
+function offlineVariables () {
+
+}
+
+# Print the default header
+function printHeader () {
+    # Add header/date/time to install log file
+    echo; printGood "Setips Script - version $version"
+}
+
+# Check internet connectivity
+function checkInternet () {
+    trap ctrlC INT
+    if [[ $INTERNET == "1" || -z $INTERNET ]]; then
+        # Check internet connecivity
+        WGET=`which wget`
+        $WGET -q --tries=10 --timeout=5 --spider http://google.com
+        if [[ $? -eq 0 ]]; then
+            echo; printGood "Internet connection confirmed...continuing install."
+            INTERNET=1
+        else
+            echo; printError "No internet connectivity; waiting 10 seconds and then I will try again."
+            # Progress bar to visualize wait period
+            while true;do echo -n .;sleep 1;done & 
+            sleep 10
+            kill $!; trap 'kill $!' SIGTERM
+            $WGET -q --tries=10 --timeout=5 --spider http://google.com
+            if [[ $? -eq 0 ]]; then
+                echo; printGood "Internet connected confirmed...continuing install."
+                INTERNET=1
+            else
+                echo; printError "No internet connectivity; entering 'OFFLINE' mode."
+                offlineVariables
+                INTERNET=0
+            fi
+        fi
+    fi
+}
+
+# Capture a users Ctrl-C
+function ctrlC () {
+    kill $!; trap 'kill $1' SIGTERM
+    echo; printError "Cancelled by user."
+#    whattodo
+#    rm $RACHELLOG
+    cleanup
+    echo; exit 1
+}
+
+# Check if command executed successfully...or not
+function commandStatus () {
+    export EXITCODE="$?"
+    if [[ $EXITCODE != 0 ]]; then
+        printError "Command failed.  Exit code: $EXITCODE"
+        export downloadError="1"
+    else
+        printGood "Command successful."
+    fi
+}
 
 # Find the IP addresses in use
 function listIPs {
@@ -964,7 +1096,7 @@ function printHelp {
 }
 
 # MAIN MENU
-echo; echo "Setips Script - Version $version"
+echo; echo "Setips Script - version $version"
 # Check /etc/rc.local for the execute bit
 chmod +x /etc/rc.local
 
