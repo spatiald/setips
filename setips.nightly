@@ -458,6 +458,13 @@ function initialSetup {
 	setGateway
 	setDNS
 	sed -i '/iface eth0 inet dhcp/d' /etc/network/interfaces
+## Added for Oct 
+	echo "auto lo" > /etc/network/interfaces
+	echo "iface lo inet loopback" >> /etc/network/interfaces
+	echo "" >> /etc/network/interfaces
+	echo "auto eth0" >> /etc/network/interfaces
+	echo "iface eth0 inet static" >> /etc/network/interfaces
+##		
 	echo "address $ip" >> /etc/network/interfaces
 	if ! which ipcalc > /dev/null; then
 		echo; printError "The program ipcalc is not installed...what is the actual netmask (ie 255.255.0.0)?"; read netmask
