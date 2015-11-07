@@ -317,8 +317,8 @@ function initialSetup {
 	service metasploit start
 	service metasploit stop
 	echo; echo "[+] Setup complete."
-	echo; echo "[+] Starting Cobalt Strike client."
-	cd cobaltstrike; ./cobaltstrike
+#	echo; echo "[+] Starting Cobalt Strike client."
+#	cd cobaltstrike; ./cobaltstrike
 }
 
 # Set default gateway
