@@ -9,6 +9,7 @@
 ############################################################################
 #uncomment to debug
 #set -x
+# ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | cut -d":" -f3
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -27,7 +28,7 @@ powersploitDir="$localSoftwareDir/powersploit"
 redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
 redteamShareUser="redteam"
 #wgetFromShareDotCom="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword http://share.com/remote.php/webdav/software"
-wgetFromShareDotCom="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" http://127.0.0.1/software/"
+wgetFromShareDotCom="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" http://$redteamShare/software/"
 redteamWiki="http://wiki.rt/current-wiki"
 redteamWikiUser="redteam"
 redteamPathToUpdateSetips="linux/setips.sh"
@@ -120,21 +121,21 @@ function testingScript () {
 
     downloadError="0"
 
-	if [ ! -d "$c2profilesDir" ]; then
-		echo; printQuestion "Cobaltstrike c2profiles folder does not exist; downloading..."
-		echo; $c2profilesDownload
-		commandStatus
-	else
-		echo; printGood "Cobalstrike c2profiles folder exists, moving on."
-	fi
-	# Ask if you will use a c2profile with the teamserver
-	echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) " -r
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		c2profile=""
-		cd $c2profilesDir; ls -R *; cd
-		echo; printQuestion "What c2profile would you like to use? (enter just the name)"; read c2profile
-		c2profile=`find $c2profilesDir/ -name $c2profile`
-	fi
+	tmp=/tmp/iptables.tmp
+	iplist="./ips.list"
+	# List subinterface ips randomly and put into file called "intips"
+	ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g'| awk -F:: '{ print $NF }' | head -n -1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | shuf > $iplist
+	# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
+	iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
+	# Identify the number of assigned subinterfaces
+	ipcount=`wc -l $iplist | cut -f 1 -d " "`
+	while read p; do
+		iptables -t nat -A POSTROUTING -m statistic --mode nth --every $ipcount --packet 0 -j SNAT --to-source $p
+		ipcount=$(($ipcount-1))
+	done <$iplist
+	rm $iplist
+	# Setup forward rule, if there isn't one
+	$iptables -t filter -I FORWARD 1 -j ACCEPT
 
     exit 1
 }
@@ -250,7 +251,7 @@ function listCoreIPAddr {
 # List the interfaces without addresses assigned
 function listInts {
 	echo; printStatus "Ethernet interfaces:"
-	$ifconfig |grep "eth" | awk '{ print $1 " " }' | sed "/lo/d" | sed "/:/d"
+	$ifconfig -a |grep "eth" | awk '{ print $1 " " }' | sed "/lo/d" | sed "/:/d"
 }
 
 # Ask which ethernet port you want to create subinterfaces for
@@ -416,6 +417,8 @@ function checkForSubinterfaces {
 			addSubInts
 		fi
 	else
+		echo; printStatus "Current subinterfaces:"
+		ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d" | tail -n +2
 		echo; read -p "Do you want to change your current subinterface IPs? (y/n) " -n 1 -r
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			removeSubInts
@@ -518,7 +521,7 @@ EOF
 	sed -i '$e echo "'$setipsFolder'/setips-atboot.sh&"' /etc/rc.local
 	awk 'BEGIN{OFS=FS="/"} $1~/$setipsFolder/ {$1="'$setipsFolder'";}1' /etc/rc.local > /tmp/rclocal.tmp; mv /tmp/rclocal.tmp /etc/rc.local
 	echo; printGood "Added script to setup subinterface IPs on system startup."
-	printError "The setips save file must be located at $setipsFolder/ips-saved.txt"
+	printStatus "REMEMBER:  The setips save file must remain at $setipsFolder/ips-saved.txt"
 }
 
 # Remove setips script from /etc/rc.local
@@ -569,7 +572,7 @@ function setupStaticIP {
 		echo; printError "The program ipcalc is not installed...what is the actual netmask (ie 255.255.0.0)?"; read netmask
 		echo "netmask $netmask" >> /etc/network/interfaces
 	else
-		netmask=`ipcalc -c 13 | grep Address | awk '{ print $2 }'`
+		netmask=`ipcalc $subnet | grep Address | awk '{ print $2 }'`
 		echo "netmask $netmask" >> /etc/network/interfaces
         fi
 	gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
@@ -600,8 +603,17 @@ function setupSOCKS {
 		echo; printError "The program socat is not installed...downloading now."
 		apt-get -y install socat libreadline5
 	fi
-	printStatus "Killing previous setips SSH SOCKS proxies."
-	screen -X -S ssh kill > /dev/null
+	if [[ -f $setipsFolder/proxies.current ]]; then
+		echo; printStatus "You currently have proxies running on the following ports:"
+		cat $setipsFolder/proxies.current
+		echo; read -p "Do you want to remove them? (y/N)" -n 1 -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			echo; printStatus "Killing previous setips SSH SOCKS proxies."
+			stopSOCKS
+		else
+			printStatus "Keeping existing proxies and continuing."
+		fi
+	fi
 	echo; printGood "Starting up SOCKS proxy..."
 	printStatus "The startup process will take ~5 secs."
 	echo "    You will be returned to the setips menu when setup is complete."
@@ -616,7 +628,7 @@ function setupSOCKS {
 			break
 		fi
 	done
-	printQuestion "What is root's password?"; read -s password
+	echo; printQuestion "What is root's password?"; read -s password
 	echo; printStatus "Checking if the SSH server is running..."
 	if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
 		printGood "SSH server *is* running; let's rock."
@@ -644,6 +656,7 @@ function setupSOCKS {
 		echo "(sleep 2; echo $password; sleep 2; echo ""; sleep 1) | socat - EXEC:'screen -S ssh ssh -o StrictHostKeyChecking=no -p $sshPort -gD"$proxyport" -l root localhost',pty,setsid,ctty" > /tmp/ssh.tmp
 		if netstat -antp | grep -v grep | grep $proxyport > /dev/null; then
 			echo; printGood "SUCCESS...SOCKS proxy started on Port $proxyport."
+			echo $proxyport >> $setipsFolder/proxies.current
 			netstat -antp | grep $proxyport
 			break
 		else
@@ -673,6 +686,7 @@ function stopSOCKS {
 	while read p; do screen -X -S $p.ssh kill; done < /tmp/socks.tmp
 	rm -f /tmp/socks.tmp
 	sed -i '/screen/d' /etc/rc.local
+	rm -f $setipsFolder/proxies.current
 }
 
 # Flush all current IPTable rules
@@ -1009,7 +1023,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-SOCKS-Proxy" "Main-Menu"; do
+		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Main-Menu"; do
 			case $ut in
 				Set-Gateway )
 				listIPs
@@ -1051,7 +1065,8 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				Auto-set-IPs-on-startup )
-				setGateway
+				listInts
+				whatInterface
 				autoSetIPsOnStart
   				echo; printGood "Added setips auto-set script to /etc/rc.local."
 				break
@@ -1069,9 +1084,9 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				break
 				;;
 
-				Stop-SOCKS-Proxy )
+				Stop-All-SOCKS-Proxies )
 				stopSOCKS
-  				echo; printGood "SSH SOCKS Proxy stopped."
+  				echo; printGood "SSH SOCKS Proxies stopped."
 				break
 				;;
 
@@ -1156,6 +1171,17 @@ chmod +x /etc/rc.local
 
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
+
+# Collect missing information
+if [[ ! -f $setipsFolder/mtu.current ]]; then
+	echo; printStatus "Help me Obi Wan...I am missing some information."
+	whatMTU
+fi
+if [[ ! -f $setipsFolder/subnet.current ]]; then
+	echo; printStatus "The force is not with me...I am missing some information."
+	echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)? "; read subnet
+	echo $subnet > $setipsFolder/subnet.current
+fi
 
 # Download recommended software to improve script performance
 if [[ $internet == "0" && $downloadSoftware != "0" ]]; then
