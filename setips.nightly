@@ -15,11 +15,11 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
-version=BETA2
-internet="0" # "0"=Offline, "1"=Online, ""=(ie Blank) force ask
+version=BETA
+internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) force ask
 defaultMTU=1300 # Normal is 1500
 localSoftwareDir="$HOME" # Location where you want your downloaded software located
-downloadSoftware="1" # "O"=Do not download offline software, "1"=Always download
+downloadSoftware="0" # "O"=Do not download offline software, "1"=Always download
 cobaltstrikeDir="$localSoftwareDir/cobaltstrike"
 c2profilesDir="$localSoftwareDir/c2profiles"
 veilDir="$localSoftwareDir/veil"
@@ -443,56 +443,6 @@ function restoreSubIntsFile {
 	route add default gw $gatewayip
 }
 
-# Set the IP
-function initialSetup {
-	listInts
-	whatInterface
-	whatMTU
-	echo; printQuestion "What IP do you want to set?"; read ip
-	echo; printQuestion "What subnet (ie 8 for a 255.0.0.0)?"; read subnet
-	$ifconfig $ethInt $ip/$subnet mtu $mtu
-	# Add subnet to backup file
-	echo $subnet > $setipsFolder/subnet.current
-	echo; printGood "Your $ethInt IP is setup:"
-	echo; ifconfig $ethInt
-	setGateway
-	setDNS
-	sed -i '/iface eth0 inet dhcp/d' /etc/network/interfaces
-## Added for Oct 
-	echo "auto lo" > /etc/network/interfaces
-	echo "iface lo inet loopback" >> /etc/network/interfaces
-	echo "" >> /etc/network/interfaces
-	echo "auto eth0" >> /etc/network/interfaces
-	echo "iface eth0 inet static" >> /etc/network/interfaces
-##		
-	echo "address $ip" >> /etc/network/interfaces
-	if ! which ipcalc > /dev/null; then
-		echo; printError "The program ipcalc is not installed...what is the actual netmask (ie 255.255.0.0)?"; read netmask
-		echo "netmask $netmask" >> /etc/network/interfaces
-	else
-		netmask=`ipcalc -c 13 | grep Address | awk '{ print $2 }'`
-		echo "netmask $netmask" >> /etc/network/interfaces
-        fi
-	gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-	echo "gateway $gatewayip" >> /etc/network/interfaces
-	dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
-	echo "dns-nameservers $dns" >> /etc/network/interfaces
-	# Startup Cobaltstrike requirements
-	echo; printGood "Setting up initial services for Cobalt Strike support."
-	arch=`uname -m`
-	if [[ $hosttype = *"x86_64"* ]]; then
-		update-java-alternatives --jre -s java-1.7.0-openjdk-amd64 # For x64
-	else
-		update-java-alternatives --jre -s java-1.7.0-openjdk-i386 # For x86
-	fi
-	service postgresql start
-	service metasploit start
-	service metasploit stop
-	echo; printGood "Setup complete."
-	echo; printGood "Starting Cobalt Strike client."
-	cd cobaltstrike; ./cobaltstrike
-}
-
 # Set default gateway
 function setGateway {
 	currentgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
@@ -591,6 +541,56 @@ function autoStartSOCKSProxy {
 	sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
 	rm -f /tmp/ssh.tmp
 	echo; echo; printGood "Added SOCKS proxy auto-start script to /etc/rc.local"
+}
+
+function setupStaticIP {
+	listInts
+	whatInterface
+	whatMTU
+	echo; printQuestion "What IP do you want to set?"; read ip
+	echo; printQuestion "What subnet (ie 8 for a 255.0.0.0)?"; read subnet
+	$ifconfig $ethInt $ip/$subnet mtu $mtu
+	# Add subnet to backup file
+	echo $subnet > $setipsFolder/subnet.current
+	echo; printGood "Your $ethInt IP is setup:"
+	echo; ifconfig $ethInt
+	setGateway
+	setDNS
+	sed -i '/iface eth0 inet dhcp/d' /etc/network/interfaces
+## Added for Oct 
+	echo "auto lo" > /etc/network/interfaces
+	echo "iface lo inet loopback" >> /etc/network/interfaces
+	echo "" >> /etc/network/interfaces
+	echo "auto eth0" >> /etc/network/interfaces
+	echo "iface eth0 inet static" >> /etc/network/interfaces
+##		
+	echo "address $ip" >> /etc/network/interfaces
+	if ! which ipcalc > /dev/null; then
+		echo; printError "The program ipcalc is not installed...what is the actual netmask (ie 255.255.0.0)?"; read netmask
+		echo "netmask $netmask" >> /etc/network/interfaces
+	else
+		netmask=`ipcalc -c 13 | grep Address | awk '{ print $2 }'`
+		echo "netmask $netmask" >> /etc/network/interfaces
+        fi
+	gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+	echo "gateway $gatewayip" >> /etc/network/interfaces
+	dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
+	echo "dns-nameservers $dns" >> /etc/network/interfaces
+
+	# Startup Cobaltstrike requirements - OUTDATED with CS3
+#	echo; printGood "Setting up initial services for Cobalt Strike support."
+#	arch=`uname -m`
+#	if [[ $hosttype = *"x86_64"* ]]; then
+#		update-java-alternatives --jre -s java-1.7.0-openjdk-amd64 # For x64
+#	else
+#		update-java-alternatives --jre -s java-1.7.0-openjdk-i386 # For x86
+#	fi
+#	service postgresql start
+#	service metasploit start
+#	service metasploit stop
+#	echo; printGood "Setup complete."
+#	echo; printGood "Starting Cobalt Strike client."
+#	cd cobaltstrike; ./cobaltstrike
 }
 
 # Setup SOCKS proxy
@@ -772,44 +772,11 @@ function setupTeamserver {
 	fi
 
 	if [[ $internet == "0" ]]; then
-	printQuestion "What is the password to the network share (press enter if blank)?"; read -s redteamSharePassword
+		echo; printQuestion "What is the password to the network share (press enter if blank)?"; read -s redteamSharePassword
 	fi
 
 	# Change directory to $HOME directory of current user (most likely root)
 	cd $HOME
-
-	# Download Cobalt Strike
-	if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
-		if [[ $internet == "0" ]]; then
-			echo; printError "Cobaltstrike folder does not exist."
-			echo; $cobaltstrikeDownload
-			commandStatus
-#			mkdir -p /redteam/toolkit/ > /dev/null
-			tar xzf $localSoftwareDir/cobaltstrike.tgz
-		else
-			printError "Cobaltstrike folder does not exist...download/decompress to /root/cobaltstrike and try again."
-			exit 1
-		fi
-	else
-		echo; printGood "Cobalstrike folder exists, moving on."
-	fi
-
-	# Download Cobalt Strike C2 Profiles
-	if [ ! -d "$c2profilesDir" ]; then
-		echo; printQuestion "Cobaltstrike c2profiles folder does not exist."
-		echo; $c2profilesDownload
-		commandStatus
-	else
-		echo; printGood "Cobalstrike c2profiles folder exists, moving on."
-	fi
-	# Ask if you will use a c2profile with the teamserver
-	echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		c2profile=""
-		cd $c2profilesDir; ls -R *; cd
-		echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
-		c2profile=`find $c2profilesDir/ -name $c2profile`
-	fi
 
 	# Download Veil
 	echo; $veilDownload
@@ -836,6 +803,38 @@ function setupTeamserver {
 		commandStatus
 	else
 		echo; printGood "PowerSploit folder exists, moving on."
+	fi
+
+	# Download Cobalt Strike C2 Profiles
+	if [ ! -d "$c2profilesDir" ]; then
+		echo; printQuestion "Cobaltstrike c2profiles folder does not exist."
+		echo; $c2profilesDownload
+		commandStatus
+	else
+		echo; printGood "Cobalstrike c2profiles folder exists, moving on."
+	fi
+	# Ask if you will use a c2profile with the teamserver
+	echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		c2profile=""
+		cd $c2profilesDir; ls -R *; cd
+		echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
+		c2profile=`find $c2profilesDir/ -name $c2profile`
+	fi
+
+	# Download Cobalt Strike
+	clear
+	if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
+		if [[ $internet == "0" ]]; then
+			echo; printError "Cobaltstrike folder does not exist."
+			echo; $cobaltstrikeDownload
+			commandStatus
+			tar xzf $localSoftwareDir/cobaltstrike.tgz
+		else
+			printError "Cobaltstrike folder does not exist...you will need to download/decompress to /root/cobaltstrike."
+		fi
+	else
+		echo; printGood "Cobalstrike folder exists, moving on."
 	fi
 
 	# Startup teamserver
@@ -916,8 +915,13 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "Main-Menu"; do
+		select au in "Setup-Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "Main-Menu"; do
 			case $au in
+				Setup-Static-IP )
+				setupStaticIP
+				break
+				;;
+
 				SSH-SOCKS-Proxy )
 				listInts
 				whatInterface
@@ -952,7 +956,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				Teamserver )
 				listInts
 				whatInterface
-				removeSubInts
 				setupTeamserver
 				break
 				;;
@@ -1006,13 +1009,8 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Initial-Setup" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-SOCKS-Proxy" "Main-Menu"; do
+		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-SOCKS-Proxy" "Main-Menu"; do
 			case $ut in
-				Initial-Setup )
-				initialSetup
-				break
-				;;
-
 				Set-Gateway )
 				listIPs
 				setGateway
@@ -1158,6 +1156,8 @@ chmod +x /etc/rc.local
 
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
+
+# Download recommended software to improve script performance
 if [[ $internet == "0" && $downloadSoftware != "0" ]]; then
 	echo; read -e -p "I have to download some files for this script...ready? (y/n) "
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
