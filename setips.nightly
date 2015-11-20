@@ -11,12 +11,11 @@
 #set -x
 
 # Offline programs to put on local storage/web server:
-# - sublime (http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb or http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb)
-# - cobaltstrike.tgz
-# - c2profiles.tgz
-# - powersploit
-# - veil (need to figure this one out)
-# - ???
+# - sublime32/64.deb
+# - cobaltstrike.zip
+# - c2profiles.zip
+# - powersploit.zip
+# - veil.zip
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -24,31 +23,35 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
 version=BETA
-internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) force ask
+internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 defaultMTU=1300 # Normal is 1500
-localSoftwareDir="$HOME" # Location where you want your downloaded software located
-downloadSoftware="0" # "O"=Do not download offline software, "1"=Always download
-cobaltstrikeDir="$localSoftwareDir/cobaltstrike"
-c2profilesDir="$localSoftwareDir/c2profiles"
-veilDir="$localSoftwareDir/veil"
-powersploitDir="$localSoftwareDir/powersploit"
-redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
+localSoftwareDir="$HOME/software" # Location where you want your downloaded software located
+downloadSoftware="0" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
+cobaltstrikeDir="$HOME/cobaltstrike"
+c2profilesDir="$HOME/c2profiles"
+veilDir="$HOME/veil"
+powersploitDir="$HOME/powersploit"
+redteamShare="http://172.31.0.100"
+#redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
 redteamShareUser="redteam"
-#wgetFromShareDotCom="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword http://share.com/remote.php/webdav/software"
-wgetFromShareDotCom="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" http://$redteamShare/software/"
+#offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword http://share.com/remote.php/webdav/software"
+offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" $redteamShare/software/"
 redteamWiki="http://wiki.rt/current-wiki"
 redteamWikiUser="redteam"
 redteamPathToUpdateSetips="linux/setips.sh"
 redteamPathToUpdateSetipsBeta="linux/setips-beta.sh"
 redteamPathToPullSnortRules="scripts/snort.rules"
 snortRulesFile="snort.rules"
-snortRulesDirectory="/root/snort-rules"
+snortRulesDirectory="$HOME/snort-rules"
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile"
-setipsUpdateFileDownloadLocation="/root/setips.sh"
-# Do NOT change the following
+setipsUpdateFileDownloadLocation="$HOME/setips.sh"
+
+### Do NOT change the following
+os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
+osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-setipsFolder="/root/setips-files"
+setipsFolder="$HOME/setips-files"
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
 ipsArchive="$setipsFolder/ips-archive.txt" # IP archive listed by date/time for reference during exercises
 iptablesBackup="$setipsFolder/iptables"
@@ -57,27 +60,30 @@ subintsBackup="$setipsFolder/subints"
 downloadError="0"
 
 # Adjust the following two functions as necessary
-function onlineVariables () {
+onlineVariables(){
 	socatDownload="apt-get -y install socat"
 	cobaltstrikeDownload=""
 	c2profilesDownload="git clone https://github.com/rsmudge/Malleable-C2-Profiles c2profiles"
 	veilDownload="git clone https://github.com/Veil-Framework/Veil veil"
 	powersploitDownload="git clone https://github.com/mattifestation/PowerSploit powersploit"
+	sublime32Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O sublime32.deb"
+	sublime64Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O sublime64.deb"
 }
 
-function offlineVariables () {
-	downloadOfflineSoftware="$wgetFromShareDotCom"
-	socatDownload=""
-	cobaltstrikeDownload=""
-	c2profilesDownload=""
-	veilDownload=""
-	powersploitDownload=""
+offlineVariables(){
+	socatDownload="apt-get -y install socat"
+	cobaltstrikeDownload="update -u $localSoftwareDir/cobaltstrike.tgz -d $HOME/"
+	c2profilesDownload="update -u $localSoftwareDir/c2profiles.zip -d $HOME"
+	veilDownload="update -u $localSoftwareDir/veil.zip -d $HOME"
+	powersploitDownload="update -u $localSoftwareDir/powersploit.zip -d $HOME"
+	sublime32Download="$localSoftwareDir/sublime32.deb"
+	sublime64Download="$localSoftwareDir/sublime64.deb"
 }
 
 # Fix backspace
 stty sane
 
-# Do not change this - sets counter to 0
+### Do not change this - sets counter to 0
 counter=0
 inundator=`which inundator`
 ifconfig=`which ifconfig`
@@ -88,74 +94,54 @@ iptables=`which iptables`
 #in case you wish to kill it
 trap 'exit 3' 1 2 3 15
 
-function printGood () {
+printGood(){
     echo -e "\x1B[01;32m[+]\x1B[0m $1"
 }
 
-function printError () {
+printError(){
     echo -e "\x1B[01;31m[-]\x1B[0m $1"
 }
 
-function printStatus () {
+printStatus(){
     echo -e "\x1B[01;35m[*]\x1B[0m $1"
 }
 
-function printQuestion () {
+printQuestion(){
     echo -e "\x1B[01;33m[?]\x1B[0m $1"
 }
 
-
-# Setup backup folder for saving setips scripts/backup files
-if [[ ! -d "$setipsFolder" ]]; then
-	mkdir -p $iptablesBackup
-	echo; printGood "Created $iptablesBackup; all setips files are stored there."
-fi
-
-if [[ -f "/root/ips-saved.txt" ]]; then
-	if [[ -f "$ipsSaved" ]]; then
-		rm -f /root/ips-saved.txt /root/ips-archive.txt > /dev/null 2>&1
-		rm -f /ips-saved.txt /ips-archive.txt 2>&1
-	else
-		mv /root/ips-saved.txt /root/ips-archive.txt $setipsFolder > /dev/null 2>&1
-		mv /ips-saved.txt /ips-archive.txt $setipsFolder > /dev/null 2>&1
-	fi
-fi
-
 # Test function
-function testingScript () {
+testingScript(){
     set -x
     trap ctrlC INT
 
     downloadError="0"
 
-	tmp=/tmp/iptables.tmp
-	iplist="./ips.list"
-	# List subinterface ips randomly and put into file called "intips"
-	ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g'| awk -F:: '{ print $NF }' | head -n -1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | shuf > $iplist
-	# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
-	iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
-	# Identify the number of assigned subinterfaces
-	ipcount=`wc -l $iplist | cut -f 1 -d " "`
-	while read p; do
-		iptables -t nat -A POSTROUTING -m statistic --mode nth --every $ipcount --packet 0 -j SNAT --to-source $p
-		ipcount=$(($ipcount-1))
-	done <$iplist
-	rm $iplist
-	# Setup forward rule, if there isn't one
-	$iptables -t filter -I FORWARD 1 -j ACCEPT
-
     exit 1
 }
 
-function opMode () {
+osCheck(){
+	if [ -z "${os}" ] || [ -z "${osVersion}" ]; then
+	  printError " [ERROR] Internal Issue. Couldn't Detect OS Information."
+	elif [ "${os}" == "kali" ]; then
+	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
+	elif [ "${os}" == "ubuntu" ]; then
+	  osVersion=$(awk -F '["=]' '/^VERSION_ID=/ {print $3}' /etc/os-release 2>&- | cut -d'.' -f1)
+	  printGood "Ubuntu ${osVersion} $(uname -m) Detected."
+	elif [ "${os}" == "debian" ]; then
+	  printGood "Debian ${osVersion} $(uname -m) Detected."
+	fi
+}
+
+opMode(){
     trap ctrlC INT
-    function opModeOnline () {
+    opModeOnline(){
 		echo; printGood "Script set for 'ONLINE' mode."
 		internet="1"
 		onlineVariables
 		checkInternet
     }
-    function opModeOffline () {
+    opModeOffline(){
 		echo; printGood "Script set for 'OFFLINE' mode."
 		internet="0"
 		offlineVariables
@@ -186,24 +172,19 @@ function opMode () {
  	fi
 }
 
-# Print the default header
-function printHeader () {
-    # Add header/date/time to install log file
-    echo; printGood "Setips Script - version $version"
-}
-
 # Check internet connectivity
-function checkInternet () {
+checkInternet(){
 	trap ctrlC INT
+	echo; printStatus "Checking internet connectivity..."
     if [[ $internet == "1" || -z $internet ]]; then
         # Check internet connecivity
         WGET=`which wget`
-        $WGET -q --tries=10 --timeout=5 --spider http://google.com
+        $WGET -q --tries=10 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
         if [[ $? -eq 0 ]]; then
-            echo; printGood "Internet connection confirmed...continuing."
+            printGood "Internet connection confirmed...continuing."
             internet=1
         else
-            echo; printError "No internet connectivity; waiting 10 seconds and then I will try again."
+            printError "No internet connectivity; waiting 10 seconds and then I will try again."
             # Progress bar to visualize wait period
             while true;do echo -n .;sleep 1;done & 
             sleep 10
@@ -222,13 +203,13 @@ function checkInternet () {
 }
 
 # Capture a users Ctrl-C
-function ctrlC () {
+ctrlC(){
     echo; printError "Cancelled by user."
     echo; exit $?
 }
 
 # Check if command executed successfully...or not
-function commandStatus () {
+commandStatus(){
     export EXITCODE="$?"
     if [[ $EXITCODE != 0 ]]; then
         printError "Command failed.  Exit code: $EXITCODE"
@@ -238,7 +219,7 @@ function commandStatus () {
     fi
 }
 
-function collectInfo {
+collectInfo(){
 	# Collect missing information
 	if [[ ! -f $setipsFolder/mtu.current ]]; then
 		echo; printStatus "Help me Obi Wan...I am missing some information."
@@ -259,32 +240,60 @@ function collectInfo {
 	fi
 }
 
+# Download offline software repo from server (variable = offlineDownloadServer)
+downloadOfflineSoftware(){
+	if [[ $downloadSoftware == "" || $downloadSoftware == "1" ]]; then
+		echo; printQuestion "For offline exercises, an offline software repository is usually available."
+		read -p "Do you want to download/update your offline software repository? (y/N) " -n 1 -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			cd $localSoftwareDir
+			echo; printStatus "Checking for offline software updates."
+			$offlineDownloadServer
+			commandStatus
+			echo; printStatus "Offline software status:"
+			if [[ -f sublime32.deb ]]; then printGood "Sublime 32-bit"; else printError "Sublime 32-bit"; fi
+			if [[ -f sublime64.deb ]]; then printGood "Sublime 64-bit"; else printError "Sublime 64-bit"; fi
+			if [[ -f cobaltstrike.zip ]]; then printGood "Cobalt Strike"; else printError "Cobalt Strike"; fi
+			if [[ -f c2profiles.zip ]]; then printGood "C2 Profiles"; else printError "C2 Profiles"; fi
+			if [[ -f powersploit.zip ]]; then printGood "Powersploit"; else printError "Powersploit"; fi
+			if [[ -f veil.zip ]]; then printGood "Veil"; else printError "Veil"; fi
+			if [[ $downloadError == "1" ]]; then
+				echo; printError "Download failed. Check if the variable 'offlineDownloadServer' is set correctly."
+				echo "Certain functions of this script will not work."
+			fi
+		else
+			echo; printStatus "User chose not to download/update their offline software repo."
+			echo "HINT:  You can set the variable 'downloadsoftware' to 0 to prevent this prompt"
+		fi
+	fi
+}
+
 # Find the IP addresses in use
-function listIPs {
+listIPs(){
 	echo; printStatus "Ethernet interfaces that have assigned addresses:"
 	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d"
 }
 
 # Find the core IP address in use
-function listCoreInterfaces {
+listCoreInterfaces(){
 	echo; printStatus "Core IP addresses on this system:"
 	#$ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }'
 	$ifconfig | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | grep -v eth'[0-9]': | head -n -1
 }
 
 # Show only the core IP address
-function listCoreIPAddr {
+listCoreIPAddr(){
 	$ifconfig $ethInt |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $2 }' | head -n 1 2>&1
 }
 
 # List the interfaces without addresses assigned
-function listInts {
+listInts(){
 	echo; printStatus "Ethernet interfaces:"
 	$ifconfig -a |grep "eth" | awk '{ print $1 " " }' | sed "/lo/d" | sed "/:/d"
 }
 
 # Ask which ethernet port you want to create subinterfaces for
-function whatInterface {
+whatInterface(){
 #if [[ ! -z ${ethInt:+x} ]]; then
 listCoreInterfaces
 #	listInts
@@ -300,13 +309,13 @@ done
 }
 
 # List IPs, single line, comma-seperated
-function listIPs-oneline {
+listIPs-oneline(){
 	# List IPs for use in Armitage/Cobalt Strike "Teamserver"
 	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g'| awk -F:: '{ print $NF }' | head -n -1 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//'
 }
 
 # Tests IP for connectivity
-function pingTest {
+pingTest(){
 	if [ `which fping` ]
 	then
 		$fping -c 1 $unusedip || echo $unusedip/$subnet >> /tmp/ips.txt
@@ -316,7 +325,7 @@ function pingTest {
 }
 
 # What MTU
-function whatMTU {
+whatMTU(){
 	# MTU
 	if [[ -f $setipsFolder/mtu.current ]]; then
 		echo; printStatus "Your current mtu is:  $(cat $setipsFolder/mtu.current)";
@@ -339,7 +348,7 @@ function whatMTU {
 }
 
 # Remove all subinterfaces
-function removeSubInts {
+removeSubInts(){
 	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
 	while IFS= read sub; do
 	$ifconfig $sub down > /dev/null 2>&1
@@ -354,7 +363,7 @@ function removeSubInts {
 }
 
 # Add subinterfaces
-function addSubInts {
+addSubInts(){
 	{ rm /tmp/ips.txt; touch /tmp/ips.txt; } > /dev/null 2>&1
 	# MTU
 	whatMTU
@@ -451,7 +460,7 @@ function addSubInts {
 }
 
 # Check for subinterfaces
-function checkForSubinterfaces {
+checkForSubinterfaces(){
 	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
 	if [ ! -s /tmp/sub.txt ]; then
 		echo; read -p "No subinterfaces exist...would you like to create some? (y/n) " -n 1 -r
@@ -470,7 +479,7 @@ function checkForSubinterfaces {
 }
 
 # Restore subinterface IPs from file
-function restoreSubIntsFile {
+restoreSubIntsFile(){
 	# Identify the subinterfaces save file
 	echo; printQuestion "What is the full path to the setips save file (default is $ipsSaved)?"; read savefile || return
 	if [ -z ${savefile:+x} ]; then
@@ -489,7 +498,7 @@ function restoreSubIntsFile {
 }
 
 # Set default gateway
-function setGateway {
+setGateway(){
 	echo
 	currentgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 	gatewayip=$currentgw
@@ -519,7 +528,7 @@ function setGateway {
 }
 
 # Set DNS
-function setDNS {
+setDNS(){
 	echo; printStatus "Your current DNS settings:"
 	cat /etc/resolv.conf
 	echo; read -p "Do you want to change your DNS servers? (y/N) " -n 1 -r
@@ -537,7 +546,7 @@ function setDNS {
 }
 
 # Auto set subinterface IPs on system start/reboot
-function autoSetIPsOnStart {
+autoSetIPsOnStart(){
 	rm /root/setips-atstart.sh > /dev/null 2>&1 # check for old version
 	subnet=`cat $setipsFolder/subnet.current`
 	$ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $1 " " $NF }' | sed -e "s/$/\/$subnet/" | sed "/lo/d" > $ipsSaved
@@ -566,20 +575,20 @@ EOF
 }
 
 # Remove setips script from /etc/rc.local
-function removeSetIPsOnStart {
+removeSetIPsOnStart(){
 	sed -i '/setips-atboot/d' /etc/rc.local
 	rm -f /root/setips-atboot.sh
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
-function fixSSHConfigRoot {
+fixSSHConfigRoot(){
 	awk 'BEGIN{OFS=FS=" "} $1~/PermitRootLogin/ {$2="yes";}1' /etc/ssh/sshd_config > /tmp/sshd_config.tmp; mv /tmp/sshd_config.tmp /etc/ssh/sshd_config
 	service ssh restart
 	echo; printGood "Modified /etc/ssh/sshd_config file to allow root to login with a password, restarted ssh."
 }
 
 # Add ssh socks proxy to /etc/rc.local
-function autoStartSOCKSProxy {
+autoStartSOCKSProxy(){
 	sed -i '/screen/d' /etc/rc.local
 	sed -i '$e echo "#SOCKS - Auto-start SOCKS proxy on startup using screen"' /etc/rc.local
 	sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
@@ -587,7 +596,7 @@ function autoStartSOCKSProxy {
 	echo; echo; printGood "Added SOCKS proxy auto-start script to /etc/rc.local"
 }
 
-function setupStaticIP {
+setupStaticIP(){
 	configureStaticIP=1
 	echo "# This config was auto-generated using the setips.sh script" > /etc/network/interfaces
 	echo "auto lo" >> /etc/network/interfaces
@@ -633,7 +642,7 @@ function setupStaticIP {
 }
 
 # Setup SOCKS proxy
-function setupSOCKS {
+setupSOCKS(){
 	# Check for dependencies
 	if ! which socat > /dev/null; then
 		echo; printError "The program socat is not installed and is required...downloading now."
@@ -721,7 +730,7 @@ function setupSOCKS {
 }
 
 # Stop SOCKS proxy
-function stopSOCKS {
+stopSOCKS(){
 	screen -ls |grep ssh|cut -d"." -f1|cut -b2- > /tmp/socks.tmp
 	while read p; do screen -X -S $p.ssh kill; done < /tmp/socks.tmp
 	rm -f /tmp/socks.tmp
@@ -730,7 +739,7 @@ function stopSOCKS {
 }
 
 # Flush all current IPTable rules
-function flushIPTables {
+flushIPTables(){
 	# Flushing all rules
 	$iptables -F
 	$iptables -X
@@ -744,7 +753,7 @@ function flushIPTables {
 }
 
 # Add iptables script to /etc/rc.local
-function autoStartIPTables {
+autoStartIPTables(){
 		sed -i '/iptable*/d' /etc/rc.local
 		sed -i '$e echo "#IPTables - Restore iptable rules on reboot"' /etc/rc.local
 		sed -i '$e echo "iptables-restore < PATHTO"' /etc/rc.local
@@ -752,12 +761,12 @@ function autoStartIPTables {
 }
 
 # Remove iptables reinstall script from /etc/rc.local
-function removeStartIPTables {
+removeStartIPTables(){
 	sed -i '/iptable/d' /etc/rc.local
 }
 
 # Display the current IPTables list
-function displayIPTables {
+displayIPTables(){
 	if [[ -z `iptables-save` ]]; then
 		echo; printError "There are no iptable rules."
 	else
@@ -767,7 +776,7 @@ function displayIPTables {
 }
 
 # Setup IPTables SRC NAT Pivot
-function setupIPTablesPivot {
+setupIPTablesPivot(){
 	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in the /etc/rc.local file)
 	echo; read -p "Would you like to flush the current iptable rules? (y/n)" -n 1 -r
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -796,7 +805,7 @@ function setupIPTablesPivot {
 }
 
 # Setup Socat Pivot
-function setupSocatPivot {
+setupSocatPivot(){
 	# Check for dependencies
 	if ! which socat > /dev/null; then
 		echo; printError "The program socat is not installed...downloading now."
@@ -831,7 +840,7 @@ function setupSocatPivot {
 }
 
 # Setup Cobaltstrike Teamserver
-function setupTeamserver {
+setupTeamserver(){
 	trap ctrlC INT
 	distro=`cat /etc/os-release | grep ID=kali | wc -l`
 	if [[ $distro == "0" ]]; then
@@ -904,11 +913,10 @@ function setupTeamserver {
 		if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
 			if [[ $internet == "0" ]]; then
 				echo; printError "Cobaltstrike folder does not exist."
-				echo; $cobaltstrikeDownload
-				commandStatus
-				tar xzf $localSoftwareDir/cobaltstrike.tgz
+				downloadOfflineSoftware
+				unzip -u $localSoftwareDir/cobaltstrike.zip -d $HOME/
 			else
-				printError "Cobaltstrike folder does not exist...you will need to download/decompress to /root/cobaltstrike."
+				printError "Cobaltstrike folder does not exist...you will need to download/decompress to $HOME/cobaltstrike."
 			fi
 		else
 			echo; printGood "Cobalstrike folder exists, moving on."
@@ -929,14 +937,50 @@ function setupTeamserver {
 	fi
 }
 
+# Setup Sublime Text
+setupSublimeText(){
+	if [[ $internet = "1" ]]; then
+		echo; printStatus "Downloading Sublime Text installer."
+		if [[ $(uname -m) == "x86_64" ]]; then
+			wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O $localSoftwareDir/sublime64.deb
+			commandStatus
+			sublimeInstaller=$localSoftwareDir/sublime64.deb
+		else
+			wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O $localSoftwareDir/sublime32.deb
+			commandStatus
+			sublimeInstaller=$localSoftwareDir/sublime32.deb
+		fi
+# Not working :(
+#		add-apt-repository ppa:webupd8team/sublime-text-3
+#		apt-get update
+#		apt-get install sublime-text-installer
+	else
+		if [[ $(uname -m) == "x86_64" ]]; then
+			if [[ -f $sublime64Download ]]; then
+				echo; printError "Sublime 64-bit offline installer does not exist."
+				downloadOfflineSoftware
+			fi
+			sublimeInstaller=$localSoftwareDir/sublime64.deb
+		else
+			if [[ -f $sublime32Download ]]; then
+				echo; printError "Sublime 32-bit offline installer does not exist."
+				downloadOfflineSoftware
+			fi
+			sublimeInstaller=$localSoftwareDir/sublime32.deb
+		fi
+	fi
+	echo; printStatus "Installing Sublime Text."
+	dpkg -i $sublimeInstaller
+}
+
 # Loop function to redisplay menu
-function whatToDo {
+whatToDo(){
 	echo; printQuestion "What would you like to do next?"
 	echo "1)Setup  2)Subinterfaces  3)Utilities  4)Export  5)Quit"
 }
 
 # Clean old crap from iptables
-function cleanIPTables {
+cleanIPTables(){
 	tmp=`mktemp`
 	tmp2=`mktemp`
 	tmpDNAT=`mktemp`
@@ -959,7 +1003,7 @@ function cleanIPTables {
 }
 
 # Save IPTables for historical purposes
-function saveIPTables {
+saveIPTables(){
 	currentDateTime=`date +"%Y%b%d-%H%M"`
 	iptablesBackupfile="iptables-$currentDateTime"
 	iptables-save > $iptablesBackup/$iptablesBackupfile
@@ -968,7 +1012,7 @@ function saveIPTables {
 }
 
 # Create IPTables to randomize source port when pivoting
-function randomizePivotIP {
+randomizePivotIP(){
 	tmp=/tmp/iptables.tmp
 	iplist="./ips.list"
 	# List subinterface ips randomly and put into file called "intips"
@@ -987,13 +1031,13 @@ function randomizePivotIP {
 }
 
 # Start fully interactive mode (default when no options given or by adding "-i")
-function interactiveMode {
+interactiveMode(){
 echo; printError "Remember to remove your $ipsArchive file if you are starting a new exercise."; echo
 select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "Setup-Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "Main-Menu"; do
+		select au in "Setup-Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Main-Menu"; do
 			case $au in
 				Setup-Static-IP )
 				setupStaticIP
@@ -1031,6 +1075,11 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 				Teamserver )
 				setupTeamserver
+				break
+				;;
+
+				SublimeText )
+				setupSublimeText
 				break
 				;;
 
@@ -1084,22 +1133,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 		echo
 		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Main-Menu"; do
 			case $ut in
-				Set-Gateway )
-				listIPs
-				setGateway
-				break
-				;;
-
-				Set-DNS )
-				setDNS
-				break
-				;;
-
-				Fix-SSH-Without-Password )
-				fixSSHConfigRoot
-				break
-				;;
-
 				Display-IPTables )
 				displayIPTables
 				break
@@ -1148,6 +1181,22 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				break
 				;;
 
+				Set-Gateway )
+				listIPs
+				setGateway
+				break
+				;;
+
+				Set-DNS )
+				setDNS
+				break
+				;;
+
+				Fix-SSH-Without-Password )
+				fixSSHConfigRoot
+				break
+				;;
+
 				Main-Menu )
 				break
 				;;
@@ -1193,7 +1242,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 done
 }
 
-function printHelp {
+printHelp(){
 	echo "Usage: [-h] [-i] [-l] [-r] [-s <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
@@ -1226,9 +1275,22 @@ function printHelp {
 echo; echo "Setips Script - version $version"
 # Check /etc/rc.local for the execute bit
 chmod +x /etc/rc.local
+osCheck
 
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
+
+# Setup setips folder (for saving setips scripts/backup files)
+if [[ ! -d "$setipsFolder" ]]; then
+	mkdir -p $setipsFolder
+	echo; printGood "Created $setipsFolder; all setips files are stored there."
+fi
+
+# Setup local software folder (for offline software installs)
+if [[ ! -d "$localSoftwareDir" ]]; then
+	mkdir -p $localSoftwareDir
+	echo; printGood "Created $localSoftwareDir; all offline software is stored there."
+fi
 
 # Ask to run interface setup or, if setup, collect information
 if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
@@ -1243,20 +1305,7 @@ if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; th
 fi
 
 # Download recommended software to improve script performance
-if [[ $internet == "0" && $downloadSoftware != "0" ]]; then
-	echo; read -e -p "I have to download some files for this script...ready? (y/n) "
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		cd $localSoftwareDir
-		echo; printStatus "Downloading offline software repo for local use by this script."
-		$downloadOfflineSoftware
-		commandStatus
-		if [[ -d $localSoftwareDir/software ]]; then
-			mv software/* .; rm -rf software
-		else
-			echo; printError "Download failed. Check if the variable 'downloadOfflineSoftware' is set correctly."
-		fi
-	fi
-fi
+downloadOfflineSoftware
 
 if [[ $1 = "" || $1 = "--help" ]]; then
 	echo; printHelp >&2
