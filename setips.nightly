@@ -9,7 +9,14 @@
 ############################################################################
 #uncomment to debug
 #set -x
-# ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | cut -d":" -f3
+
+# Offline programs to put on local storage/web server:
+# - sublime (http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb or http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb)
+# - cobaltstrike.tgz
+# - c2profiles.tgz
+# - powersploit
+# - veil (need to figure this one out)
+# - ???
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -231,16 +238,38 @@ function commandStatus () {
     fi
 }
 
+function collectInfo {
+	# Collect missing information
+	if [[ ! -f $setipsFolder/mtu.current ]]; then
+		echo; printStatus "Help me Obi Wan...I am missing some information."
+		whatMTU
+	fi
+	if [[ ! -f $setipsFolder/subnet.current ]]; then
+		whatInterface
+		currentCoreIP=$($ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f2 | cut -d" " -f1)
+		currentCoreNetmask=$(ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f4)
+		if [[ $(which ipcalc) ]]; then
+			ipcalc $currentCoreIP/$currentCoreNetmask | grep Netmask | cut -d" " -f6 > $setipsFolder/subnet.current
+		else
+			echo "Current netmask:  $currentCoreNetmask"
+			echo; printStatus "The force is not with me...I can't figure out the subnet you are on."
+			printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)? "; read subnet
+			echo $subnet > $setipsFolder/subnet.current
+		fi
+	fi
+}
+
 # Find the IP addresses in use
 function listIPs {
 	echo; printStatus "Ethernet interfaces that have assigned addresses:"
-	$ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d"
+	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d"
 }
 
 # Find the core IP address in use
-function listCoreInterface {
-	echo; printStatus "Core IP address on this system:"
-	$ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }'
+function listCoreInterfaces {
+	echo; printStatus "Core IP addresses on this system:"
+	#$ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }'
+	$ifconfig | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | grep -v eth'[0-9]': | head -n -1
 }
 
 # Show only the core IP address
@@ -256,6 +285,9 @@ function listInts {
 
 # Ask which ethernet port you want to create subinterfaces for
 function whatInterface {
+#if [[ ! -z ${ethInt:+x} ]]; then
+listCoreInterfaces
+#	listInts
 while :; do
 	echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0 or eth1)?"; read ethInt
 	if [[ "$ethInt" =~ ^[A-Za-z]{3}+[0-9]{1}$ ]]; then
@@ -264,6 +296,7 @@ while :; do
 		echo; printError "Please enter the root ethernet interface (for example, enter eth0 not eth0:1)"
 	fi
 done
+#fi
 }
 
 # List IPs, single line, comma-seperated
@@ -285,12 +318,21 @@ function pingTest {
 # What MTU
 function whatMTU {
 	# MTU
-	echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
+	if [[ -f $setipsFolder/mtu.current ]]; then
+		echo; printStatus "Your current mtu is:  $(cat $setipsFolder/mtu.current)";
+		mtu=$(cat $setipsFolder/mtu.current)
+		echo; read -p "Do you want to change your mtu? (y/N)" -n 1 -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			echo; echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
+		else
+			echo; printError "MTU not changed."
+		fi
+	else
+		echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
+	fi
 	if [ -z ${mtu:+x} ]; then
 		printGood "Setting mtu of $defaultMTU."
 		mtu=$defaultMTU
-	else
-		printGood "Setting your desired mtu of $mtu"
 	fi
 	# Add MTU to backup file
 	echo $mtu > $setipsFolder/mtu.current
@@ -432,10 +474,10 @@ function restoreSubIntsFile {
 	# Identify the subinterfaces save file
 	echo; printQuestion "What is the full path to the setips save file (default is $ipsSaved)?"; read savefile || return
 	if [ -z ${savefile:+x} ]; then
-		printGood "Restoring from $ipsSaved.";
+		printGood "Restoring from $ipsSaved."
 		savefile=$ipsSaved
 	else
-		printGood "Restoring from $savefile";
+		printGood "Restoring from $savefile"
 	fi
 	echo; printQuestion "What is the IP of the gateway?"; read gatewayip || return
 	# Add subinterfaces
@@ -448,14 +490,15 @@ function restoreSubIntsFile {
 
 # Set default gateway
 function setGateway {
+	echo
 	currentgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 	gatewayip=$currentgw
 	if [ -z ${currentgw:+x} ]; then
-		echo; printError "You do not have a default gateway set.";
+		echo; printError "You do not have a default gateway set."
 	else
-		echo; printStatus "Your current gateway is:  $gatewayip";
+		echo; printStatus "Your current gateway is:  $gatewayip"
 	fi
-	echo; read -p "Do you want to change your gateway? (y/n)" -n 1 -r
+	echo; read -p "Do you want to change your gateway? (y/N) " -n 1 -r
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		echo; printQuestion "What is the IP of the gateway?"; read gatewayip || return
 		# Remove current gw
@@ -463,26 +506,23 @@ function setGateway {
 		# Add new gw
 		route add default gw $gatewayip
 		newgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-
-#		newgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 		if [ -z ${newgw:+x} ]; then
-			echo; printError "Something went wrong...check your desired gateway.";
+			echo; printError "Something went wrong...check your desired gateway."
 		else
 			echo; printGood "Your gateway was updated to:  $newgw"; echo
 			# Print current routing table
 			route -n; echo
-			echo; printGood "Your gateway was set.";
 		fi
 	else
-		echo; printError "Gateway not changed.";
+		echo; printError "Gateway not changed."
 	fi
 }
 
 # Set DNS
 function setDNS {
-	echo; printStatus "Your current DNS settings:";
+	echo; printStatus "Your current DNS settings:"
 	cat /etc/resolv.conf
-	echo; read -p "Do you want to change your DNS servers? (y/n)" -n 1 -r
+	echo; read -p "Do you want to change your DNS servers? (y/N) " -n 1 -r
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		echo; printQuestion "What are the DNS server IPs (space separated)?"; read dnsips || return
 		rm /etc/resolv.conf
@@ -492,7 +532,7 @@ function setDNS {
 		echo; printGood "Your DNS settings were updated as follows:"
 		cat /etc/resolv.conf; echo;
 	else
-		echo; printError "DNS not changed.";
+		echo; printError "DNS not changed."
 	fi
 }
 
@@ -502,7 +542,10 @@ function autoSetIPsOnStart {
 	subnet=`cat $setipsFolder/subnet.current`
 	$ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $1 " " $NF }' | sed -e "s/$/\/$subnet/" | sed "/lo/d" > $ipsSaved
 	removeSetIPsOnStart
-	setGateway
+	gatewayip=`route -n|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+	if [ ! -z ${gateway:+x} ]; then
+		setGateway
+	fi
 	sed "s,%SETIPSFOLDER%,$setipsFolder,g;s,%GATEWAYIP%,$gatewayip,g" >$setipsFolder/setips-atboot.sh << 'EOF'
 #!/bin/bash
 #Auto-generated script - DO NOT REMOVE
@@ -520,8 +563,6 @@ EOF
 	sed -i '$e echo "#setips - Auto-set IPs on startup using setips-atboot.sh script"' /etc/rc.local
 	sed -i '$e echo "'$setipsFolder'/setips-atboot.sh&"' /etc/rc.local
 	awk 'BEGIN{OFS=FS="/"} $1~/$setipsFolder/ {$1="'$setipsFolder'";}1' /etc/rc.local > /tmp/rclocal.tmp; mv /tmp/rclocal.tmp /etc/rc.local
-	echo; printGood "Added script to setup subinterface IPs on system startup."
-	printStatus "REMEMBER:  The setips save file must remain at $setipsFolder/ips-saved.txt"
 }
 
 # Remove setips script from /etc/rc.local
@@ -547,61 +588,60 @@ function autoStartSOCKSProxy {
 }
 
 function setupStaticIP {
-	listInts
-	whatInterface
-	whatMTU
-	echo; printQuestion "What IP do you want to set?"; read ip
-	echo; printQuestion "What subnet (ie 8 for a 255.0.0.0)?"; read subnet
-	$ifconfig $ethInt $ip/$subnet mtu $mtu
-	# Add subnet to backup file
-	echo $subnet > $setipsFolder/subnet.current
-	echo; printGood "Your $ethInt IP is setup:"
-	echo; ifconfig $ethInt
-	setGateway
-	setDNS
-	sed -i '/iface eth0 inet dhcp/d' /etc/network/interfaces
-## Added for Oct 
-	echo "auto lo" > /etc/network/interfaces
+	configureStaticIP=1
+	echo "# This config was auto-generated using the setips.sh script" > /etc/network/interfaces
+	echo "auto lo" >> /etc/network/interfaces
 	echo "iface lo inet loopback" >> /etc/network/interfaces
-	echo "" >> /etc/network/interfaces
-	echo "auto eth0" >> /etc/network/interfaces
-	echo "iface eth0 inet static" >> /etc/network/interfaces
-##		
-	echo "address $ip" >> /etc/network/interfaces
-	if ! which ipcalc > /dev/null; then
-		echo; printError "The program ipcalc is not installed...what is the actual netmask (ie 255.255.0.0)?"; read netmask
-		echo "netmask $netmask" >> /etc/network/interfaces
-	else
-		netmask=`ipcalc $subnet | grep Address | awk '{ print $2 }'`
-		echo "netmask $netmask" >> /etc/network/interfaces
-        fi
-	gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-	echo "gateway $gatewayip" >> /etc/network/interfaces
-	dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
-	echo "dns-nameservers $dns" >> /etc/network/interfaces
+	while [[ $configureStaticIP == 1 ]]; do
+		whatInterface
+		sed -i '/'$ethInt' START/,/'$ethInt' STOP/d' /etc/network/interfaces
+		whatMTU
+		echo; printQuestion "What IP do you want to set?"; read ip
+		echo; printQuestion "What subnet (ie 8 for a 255.0.0.0)?"; read subnet
+		# Configure address on interface
+		$ifconfig $ethInt $ip/$subnet mtu $mtu
+		# Add subnet to backup file
+		echo $subnet > $setipsFolder/subnet.current
+		echo; printGood "Your $ethInt interface is setup:"
+		echo; ifconfig $ethInt
+		if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
+			setGateway
+			setDNS
+		fi
 
-	# Startup Cobaltstrike requirements - OUTDATED with CS3
-#	echo; printGood "Setting up initial services for Cobalt Strike support."
-#	arch=`uname -m`
-#	if [[ $hosttype = *"x86_64"* ]]; then
-#		update-java-alternatives --jre -s java-1.7.0-openjdk-amd64 # For x64
-#	else
-#		update-java-alternatives --jre -s java-1.7.0-openjdk-i386 # For x86
-#	fi
-#	service postgresql start
-#	service metasploit start
-#	service metasploit stop
-#	echo; printGood "Setup complete."
-#	echo; printGood "Starting Cobalt Strike client."
-#	cd cobaltstrike; ./cobaltstrike
+		# Configure /etc/network/interfaces file
+		echo "# $ethInt START" >> /etc/network/interfaces
+		echo "auto $ethInt" >> /etc/network/interfaces
+		echo "iface $ethInt inet static" >> /etc/network/interfaces
+		echo "address $ip" >> /etc/network/interfaces
+		netmask=$(ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f4)
+		echo "netmask $netmask" >> /etc/network/interfaces
+		if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
+			gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+			echo "gateway $gatewayip" >> /etc/network/interfaces
+			dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
+			echo "dns-nameservers $dns" >> /etc/network/interfaces
+		fi
+		echo "# $ethInt STOP" >> /etc/network/interfaces
+		echo; read -p "Do you want to set another CORE interface with a static IP? (y/N)" -n 1 -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			configureStaticIP=1
+		else
+			configureStaticIP=0
+		fi
+	done
 }
 
 # Setup SOCKS proxy
 function setupSOCKS {
 	# Check for dependencies
 	if ! which socat > /dev/null; then
-		echo; printError "The program socat is not installed...downloading now."
+		echo; printError "The program socat is not installed and is required...downloading now."
 		apt-get -y install socat libreadline5
+		if ! which socat > /dev/null; then
+			echo; printError "The program socat could not be downloaded. The SOCKS proxy requires it and will not be setup, exiting."
+			break
+		fi
 	fi
 	if [[ -f $setipsFolder/proxies.current ]]; then
 		echo; printStatus "You currently have proxies running on the following ports:"
@@ -719,9 +759,9 @@ function removeStartIPTables {
 # Display the current IPTables list
 function displayIPTables {
 	if [[ -z `iptables-save` ]]; then
-		echo; printError "There are no IPTable rules."
+		echo; printError "There are no iptable rules."
 	else
-		echo; printGood "Displaying your current IPTables rules:"
+		echo; printGood "Displaying your current iptables rules:"
 		echo; iptables-save
 	fi
 }
@@ -746,9 +786,11 @@ function setupIPTablesPivot {
 	$iptables -t nat -A PREROUTING -p $prot -j DNAT -d $subintip --dport $incomingport --to $redteamip:$redteamport
 	$iptables -t filter -I FORWARD 1 -j ACCEPT
 	# Ask if you want to reapply the iptables rules automatically on boot (/etc/rc.local file)
-	echo; read -e -p "Would you like to apply these rules automatically on reboot? (y/n) " -r
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		autoStartIPTables
+	if [[ $(grep iptable /etc/rc.local) ]]; then
+		echo; read -e -p "Would you like to apply these rules automatically on reboot? (y/n) " -r
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			autoStartIPTables
+		fi
 	fi
 	echo
 }
@@ -766,103 +808,125 @@ function setupSocatPivot {
 		fi
 	fi
 	echo; printQuestion "What port do you want to pivot (i.e. listen for)?"; read socatport
+	while :; do
+		if [[ $(netstat -antp | grep 0.0.0.0:$socatport) || $(netstat -antp | grep 127.0.0.1:$socatport) ]]; then
+			echo; printError "Something is already listening on that port, please try a different port."
+			echo; netstat -antp | grep $socatport
+			echo; printQuestion "What port do you want to use for your socat pivot?"; read socatport
+		else
+			break
+		fi
+	done
 	echo; printQuestion "What is the redteam *IP* the pivot redirects incoming traffic to?"; read redteamip
 	echo; printQuestion "What is the redteam *PORT* the pivot redirects incoming traffic to?"; read redteamport
-	socat TCP-LISTEN:$socatport,reuseaddr,fork,su=nobody TCP:$redteamip:$redteamport&
-	echo; printGood "Socat pivot setup."
-	netstat -antp | grep $socatport
+	socat -d -d -d -lf $setipsFolder/socat.log TCP-LISTEN:$socatport,reuseaddr,fork,su=nobody TCP:$redteamip:$redteamport&
+	if [[ $(netstat -antp | grep -v grep | grep socat | grep $socatport | wc -l) -ge "1" ]]; then
+		echo; printGood "SUCCESS! Socat pivot setup; logging to $setipsFolder/socat.log"
+		netstat -antp | grep socat
+		break
+	else
+		echo; printError "FAIL...looks like the socat pivot didn't setup correctly, check $setipsFolder/socat.log for errors."
+		break
+	fi
 }
 
 # Setup Cobaltstrike Teamserver
 function setupTeamserver {
 	trap ctrlC INT
-	distro=`cat /etc/os-release | grep ID=kali`
-	if [[ $internet == "1" && ! -z $distro ]]; then
-		# Check for dependencies
-		if ! which unzip > /dev/null; then
-			echo; printError "The program unzip is not installed...downloading now."
-		apt-get -y install unzip
+	distro=`cat /etc/os-release | grep ID=kali | wc -l`
+	if [[ $distro == "0" ]]; then
+		echo; printError "This install/setup requires Kali...exiting."
+		break
+	else
+		# Online install 
+		if [[ $internet == "1" ]]; then
+			# Check for dependencies
+			if ! which unzip > /dev/null; then
+				echo; printError "The program unzip is not installed...downloading now."
+			apt-get -y install unzip
+			fi
 		fi
-	fi
-
-	if [[ $internet == "0" ]]; then
-		echo; printQuestion "What is the password to the network share (press enter if blank)?"; read -s redteamSharePassword
-	fi
-
-	# Change directory to $HOME directory of current user (most likely root)
-	cd $HOME
-
-	# Download Veil
-	echo; $veilDownload
-	commandStatus
-	if [[ -f $HOME/veil/Install.sh && $internet == "1" ]]; then
-		if [[ -d $veilDir/Veil-Evasion ]]; then
-			echo; printStatus "Veil exists, updating from GitHub."
-			/root/veil/Install.sh -u
-		else
-			echo; printStatus "Veil does not exist, installing from GitHub."
-			/root/veil/Install.sh -c
-		fi
-	fi
-	if [ ! -d $veilDir ]; then
-		echo; printStatus "Veil is unavailable."
-	else
-		echo; printGood "Veil folder exists, moving on."
-	fi
-
-	# Download PowerSploit
-	if [ ! -d "$powersploitDir" ]; then
-		echo; printError "PowerSploit folder does not exist."
-		echo; $powersploitDownload
-		commandStatus
-	else
-		echo; printGood "PowerSploit folder exists, moving on."
-	fi
-
-	# Download Cobalt Strike C2 Profiles
-	if [ ! -d "$c2profilesDir" ]; then
-		echo; printQuestion "Cobaltstrike c2profiles folder does not exist."
-		echo; $c2profilesDownload
-		commandStatus
-	else
-		echo; printGood "Cobalstrike c2profiles folder exists, moving on."
-	fi
-	# Ask if you will use a c2profile with the teamserver
-	echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		c2profile=""
-		cd $c2profilesDir; ls -R *; cd
-		echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
-		c2profile=`find $c2profilesDir/ -name $c2profile`
-	fi
-
-	# Download Cobalt Strike
-	clear
-	if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
+		# Offline install
 		if [[ $internet == "0" ]]; then
-			echo; printError "Cobaltstrike folder does not exist."
-			echo; $cobaltstrikeDownload
-			commandStatus
-			tar xzf $localSoftwareDir/cobaltstrike.tgz
-		else
-			printError "Cobaltstrike folder does not exist...you will need to download/decompress to /root/cobaltstrike."
+			echo; printQuestion "What is the password to the network share (press enter if blank)?"; read -s redteamSharePassword
 		fi
-	else
-		echo; printGood "Cobalstrike folder exists, moving on."
-	fi
 
-	# Startup teamserver
-	coreIPAddr=$(listCoreIPAddr)
-	echo; printError "What teamserver password would you like to use?"; read teamPass
-	# Populate tables in background
-#	msfrpcdpid=`ps aux|grep msfrpcd|head -n 1|awk '{ print $2 }'`
-#	kill -9 $msfrpcdpid
-#	service postgresql start
-#	service metasploit start
-#	service metasploit stop
-	printStatus "If the teamserver fails to start, correct the issues and then type this command from the cobaltstrike folder:"
-	echo "    ./teamserver $coreIPAddr $teamPass $c2profile"
-	cd $cobaltstrikeDir; ./teamserver $coreIPAddr $teamPass $c2profile
+		# Identify interface
+		whatInterface
+		# Change directory to $HOME directory of current user (most likely root)
+		cd $HOME
+		# Download Veil
+		echo; $veilDownload
+		commandStatus
+		if [[ -f $HOME/veil/Install.sh && $internet == "1" ]]; then
+			if [[ -d $veilDir/Veil-Evasion ]]; then
+				echo; printStatus "Veil exists, updating from GitHub."
+				/root/veil/Install.sh -u
+			else
+				echo; printStatus "Veil does not exist, installing from GitHub."
+				/root/veil/Install.sh -c
+			fi
+		fi
+		if [ ! -d $veilDir ]; then
+			echo; printStatus "Veil is unavailable."
+		else
+			echo; printGood "Veil folder exists, moving on."
+		fi
+
+		# Download PowerSploit
+		if [ ! -d "$powersploitDir" ]; then
+			echo; printError "PowerSploit folder does not exist."
+			echo; $powersploitDownload
+			commandStatus
+		else
+			echo; printGood "PowerSploit folder exists, moving on."
+		fi
+
+		# Download Cobalt Strike C2 Profiles
+		if [ ! -d "$c2profilesDir" ]; then
+			echo; printQuestion "Cobaltstrike c2profiles folder does not exist."
+			echo; $c2profilesDownload
+			commandStatus
+		else
+			echo; printGood "Cobalstrike c2profiles folder exists, moving on."
+		fi
+		# Ask if you will use a c2profile with the teamserver
+		echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			c2profile=""
+			cd $c2profilesDir; ls -R *; cd
+			echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
+			c2profile=`find $c2profilesDir/ -name $c2profile`
+		fi
+
+		# Download Cobalt Strike
+		clear
+		if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
+			if [[ $internet == "0" ]]; then
+				echo; printError "Cobaltstrike folder does not exist."
+				echo; $cobaltstrikeDownload
+				commandStatus
+				tar xzf $localSoftwareDir/cobaltstrike.tgz
+			else
+				printError "Cobaltstrike folder does not exist...you will need to download/decompress to /root/cobaltstrike."
+			fi
+		else
+			echo; printGood "Cobalstrike folder exists, moving on."
+		fi
+
+		# Startup teamserver
+		coreIPAddr=$(listCoreIPAddr)
+		echo; printError "What teamserver password would you like to use?"; read teamPass
+		# Populate tables in background
+	#	msfrpcdpid=`ps aux|grep msfrpcd|head -n 1|awk '{ print $2 }'`
+	#	kill -9 $msfrpcdpid
+	#	service postgresql start
+	#	service metasploit start
+	#	service metasploit stop
+		printStatus "If the teamserver fails to start, correct the issues and then type this command from the cobaltstrike folder:"
+		echo "    ./teamserver $coreIPAddr $teamPass $c2profile"
+		cd $cobaltstrikeDir; ./teamserver $coreIPAddr $teamPass $c2profile
+	fi
 }
 
 # Loop function to redisplay menu
@@ -937,9 +1001,8 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				SSH-SOCKS-Proxy )
-				listInts
 				whatInterface
-				listCoreInterface
+				listCoreInterfaces
 				checkForSubinterfaces
 				autoSetIPsOnStart
 				randomizePivotIP
@@ -950,11 +1013,10 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				IPTables-SRC-NAT-Pivot )
-				listInts
 				whatInterface
 				checkForSubinterfaces
 				autoSetIPsOnStart
-				displayIPTables
+				echo; displayIPTables
 				setupIPTablesPivot
 				randomizePivotIP
 				cleanIPTables
@@ -968,8 +1030,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				Teamserver )
-				listInts
-				whatInterface
 				setupTeamserver
 				break
 				;;
@@ -987,9 +1047,8 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 		select su in "Add-Subinterfaces" "Remove-All-Subinterfaces" "Restore-Subinterfaces" "Main-Menu"; do
 			case $su in
 				Add-Subinterfaces )
-				listInts
 				whatInterface
-				listCoreInterface
+				listCoreInterfaces
 				addSubInts
 				randomizePivotIP
 				autoSetIPsOnStart
@@ -1065,7 +1124,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				Auto-set-IPs-on-startup )
-				listInts
 				whatInterface
 				autoSetIPsOnStart
   				echo; printGood "Added setips auto-set script to /etc/rc.local."
@@ -1172,15 +1230,16 @@ chmod +x /etc/rc.local
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
 
-# Collect missing information
-if [[ ! -f $setipsFolder/mtu.current ]]; then
-	echo; printStatus "Help me Obi Wan...I am missing some information."
-	whatMTU
-fi
-if [[ ! -f $setipsFolder/subnet.current ]]; then
-	echo; printStatus "The force is not with me...I am missing some information."
-	echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)? "; read subnet
-	echo $subnet > $setipsFolder/subnet.current
+# Ask to run interface setup or, if setup, collect information
+if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
+	checkForIP=$($ifconfig | awk '/inet addr/{print substr($2,6)}' | head -n -1 | wc -l)
+	if [[ $checkForIP -ge "1" ]]; then
+		echo; printStatus "I need to collect some info since you already have your interface setup."
+		collectInfo
+	elif [[ $checkForIP == "0" ]]; then
+		echo; printStatus "You don't have an IP on any interface, starting initial setup."
+		setupStaticIP
+	fi
 fi
 
 # Download recommended software to improve script performance
@@ -1373,7 +1432,6 @@ else
 			read -e -p "Do you want to setup a proxy on your local box (y/n)? " -r
 			while :; do
 				if [[ $REPLY =~ ^[Yy]$ ]]; then
-					listInts >&2
 					whatInterface >&2
 					checkForSubinterfaces >&2
 					autoSetIPsOnStart >&2
