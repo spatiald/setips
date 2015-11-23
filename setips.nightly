@@ -9,7 +9,10 @@
 ############################################################################
 #uncomment to debug
 #set -x
-
+#
+# Highly recommended tools to install:
+# "apt-get -y unzip fping ipcalc socat libreadline5 screen"
+# "
 # Offline programs to put on local storage/web server:
 # - sublime32/64.deb
 # - cobaltstrike.zip
@@ -23,19 +26,19 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
 version=BETA
-internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 defaultMTU=1300 # Normal is 1500
+internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
+downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
 localSoftwareDir="$HOME/software" # Location where you want your downloaded software located
-downloadSoftware="0" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
 cobaltstrikeDir="$HOME/cobaltstrike"
 c2profilesDir="$HOME/c2profiles"
 veilDir="$HOME/veil"
 powersploitDir="$HOME/powersploit"
-redteamShare="http://172.31.0.100"
+redteamShare="http://172.31.0.100" #http://share.com/remote.php/webdav/software
 #redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
 redteamShareUser="redteam"
-#offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword http://share.com/remote.php/webdav/software"
-offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" $redteamShare/software/"
+#offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
+offlineDownloadServer="wget --show-progress -c -nH -r --no-parent -e robots=off --reject "index.html*" $redteamShare/software/"
 redteamWiki="http://wiki.rt/current-wiki"
 redteamWikiUser="redteam"
 redteamPathToUpdateSetips="linux/setips.sh"
@@ -46,7 +49,7 @@ snortRulesDirectory="$HOME/snort-rules"
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile"
 setipsUpdateFileDownloadLocation="$HOME/setips.sh"
 
-### Do NOT change the following
+### DO NOT CHANGE the following
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
 osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
@@ -59,26 +62,29 @@ iptablesBackupfile="iptables-$currentDateTime"
 subintsBackup="$setipsFolder/subints"
 downloadError="0"
 
-# Adjust the following two functions as necessary
+### Updated rarely
 onlineVariables(){
 	socatDownload="apt-get -y install socat"
 	cobaltstrikeDownload=""
-	c2profilesDownload="git clone https://github.com/rsmudge/Malleable-C2-Profiles c2profiles"
-	veilDownload="git clone https://github.com/Veil-Framework/Veil veil"
-	powersploitDownload="git clone https://github.com/mattifestation/PowerSploit powersploit"
+	c2profilesDownload="git clone https://github.com/rsmudge/Malleable-C2-Profiles $c2profilesDir"
+	veilDownload="git clone https://github.com/Veil-Framework/Veil $veilDir"
+	powersploitDownload="git clone https://github.com/mattifestation/PowerSploit $powersploitDir"
 	sublime32Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O sublime32.deb"
 	sublime64Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O sublime64.deb"
 }
 
 offlineVariables(){
 	socatDownload="apt-get -y install socat"
-	cobaltstrikeDownload="update -u $localSoftwareDir/cobaltstrike.tgz -d $HOME/"
-	c2profilesDownload="update -u $localSoftwareDir/c2profiles.zip -d $HOME"
-	veilDownload="update -u $localSoftwareDir/veil.zip -d $HOME"
-	powersploitDownload="update -u $localSoftwareDir/powersploit.zip -d $HOME"
+	cobaltstrikeDownload="unzip -u $localSoftwareDir/cobaltstrike.tgz -d $HOME"
+	c2profilesDownload="unzip -u $localSoftwareDir/c2profiles.zip -d $HOME"
+	veilDownload="unzip -u $localSoftwareDir/veil.zip -d $HOME"
+	powersploitDownload="unzip -u $localSoftwareDir/powersploit.zip -d $HOME"
 	sublime32Download="$localSoftwareDir/sublime32.deb"
 	sublime64Download="$localSoftwareDir/sublime64.deb"
 }
+
+# Logging
+exec &> >(tee "$setipsFolder/setips.log")
 
 # Fix backspace
 stty sane
@@ -89,6 +95,7 @@ inundator=`which inundator`
 ifconfig=`which ifconfig`
 fping=`which fping`
 ping=`which ping`
+ipcalc=`which ipcalc`
 iptables=`which iptables`
 
 #in case you wish to kill it
@@ -121,14 +128,14 @@ testingScript(){
 }
 
 osCheck(){
-	if [ -z "${os}" ] || [ -z "${osVersion}" ]; then
+	if [[ -z "$os" ]] || [[ -z "$osVersion" ]]; then
 	  printError " [ERROR] Internal Issue. Couldn't Detect OS Information."
-	elif [ "${os}" == "kali" ]; then
+	elif [[ "$os" == "kali" ]]; then
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
-	elif [ "${os}" == "ubuntu" ]; then
+	elif [[ "$os" == "ubuntu" ]]; then
 	  osVersion=$(awk -F '["=]' '/^VERSION_ID=/ {print $3}' /etc/os-release 2>&- | cut -d'.' -f1)
 	  printGood "Ubuntu ${osVersion} $(uname -m) Detected."
-	elif [ "${os}" == "debian" ]; then
+	elif [[ "$os" == "debian" ]]; then
 	  printGood "Debian ${osVersion} $(uname -m) Detected."
 	fi
 }
@@ -145,7 +152,7 @@ opMode(){
 		echo; printGood "Script set for 'OFFLINE' mode."
 		internet="0"
 		offlineVariables
-		echo; printError "Check that you updated the variables in the function 'offlineVariables'"
+		printStatus "Check that you updated the variables in the function 'offlineVariables'"
     }
     if [[ -z $internet ]]; then
 	    echo; printQuestion "Do you want to run in ONLINE or OFFLINE mode?"
@@ -229,8 +236,8 @@ collectInfo(){
 		whatInterface
 		currentCoreIP=$($ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f2 | cut -d" " -f1)
 		currentCoreNetmask=$(ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f4)
-		if [[ $(which ipcalc) ]]; then
-			ipcalc $currentCoreIP/$currentCoreNetmask | grep Netmask | cut -d" " -f6 > $setipsFolder/subnet.current
+		if [[ $ipcalc ]]; then
+			$ipcalc $currentCoreIP/$currentCoreNetmask | grep Netmask | cut -d" " -f6 > $setipsFolder/subnet.current
 		else
 			echo "Current netmask:  $currentCoreNetmask"
 			echo; printStatus "The force is not with me...I can't figure out the subnet you are on."
@@ -240,32 +247,113 @@ collectInfo(){
 	fi
 }
 
-# Download offline software repo from server (variable = offlineDownloadServer)
-downloadOfflineSoftware(){
-	if [[ $downloadSoftware == "" || $downloadSoftware == "1" ]]; then
+downloadOfflineSoftwareRepo(){
+	downloadError=0	
+	# If OFFLINE, download software from exercise repo
+	if [[ $internet == 0 ]] && [[ $downloadSoftware == "" || $downloadSoftware == "1" ]]; then
 		echo; printQuestion "For offline exercises, an offline software repository is usually available."
-		read -p "Do you want to download/update your offline software repository? (y/N) " -n 1 -r
+		read -p "Do you want to download/update your offline software repository? (y/N) " REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			cd $localSoftwareDir
 			echo; printStatus "Checking for offline software updates."
+			#	if [[ $internet == "0" ]]; then
+			#		echo; printQuestion "What is the password to the redteam network share (press enter if blank)?"; read -s redteamSharePassword
+			#	fi
 			$offlineDownloadServer
 			commandStatus
-			echo; printStatus "Offline software status:"
-			if [[ -f sublime32.deb ]]; then printGood "Sublime 32-bit"; else printError "Sublime 32-bit"; fi
-			if [[ -f sublime64.deb ]]; then printGood "Sublime 64-bit"; else printError "Sublime 64-bit"; fi
-			if [[ -f cobaltstrike.zip ]]; then printGood "Cobalt Strike"; else printError "Cobalt Strike"; fi
-			if [[ -f c2profiles.zip ]]; then printGood "C2 Profiles"; else printError "C2 Profiles"; fi
-			if [[ -f powersploit.zip ]]; then printGood "Powersploit"; else printError "Powersploit"; fi
-			if [[ -f veil.zip ]]; then printGood "Veil"; else printError "Veil"; fi
 			if [[ $downloadError == "1" ]]; then
-				echo; printError "Download failed. Check if the variable 'offlineDownloadServer' is set correctly."
-				echo "Certain functions of this script will not work."
+				echo; printError "Download failed! Check if the variable 'offlineDownloadServer' is set correctly."
+				echo "CAUTION:  Certain functions of this script will not work with these files."
 			fi
+			mv software $localSoftwareDir
 		else
 			echo; printStatus "User chose not to download/update their offline software repo."
 			echo "HINT:  You can set the variable 'downloadsoftware' to 0 to prevent this prompt"
 		fi
 	fi
+}
+
+installAdditionalSoftware(){
+	downloadError=0	
+	# Download Veil
+	echo; printStatus "INSTALLING Veil"
+	if [[ $os == "kali" ]] && [[ $osVersion == "2.0" ]]; then
+		printError "Veil on Kali 2.0 requires additional architecture support that normally requires internet to install."
+		echo "For example, Kali 2.0 does not enable i386-architecture nor have Python 2.7 installed by default"
+		echo "An OFFLINE Ubuntu software repo *may* have the needed software. This script will attempt to download."
+	fi
+	if [[ $internet == 1 ]] && [[ -f $veilDir/Install.sh ]]; then
+		if [[ -d $veilDir/Veil-Evasion ]]; then
+			echo; printStatus "Veil exists, updating from GitHub."
+			$veilDir/Install.sh -u
+		else
+			echo; printStatus "Veil does not exist, installing from GitHub."
+			$veilDir/Install.sh -c
+		fi
+	fi
+	if [[ ! -d $veilDir/Veil-Evasion ]]; then
+		printStatus "Veil folder does not exist.."
+		echo; $veilDownload
+		commandStatus
+	else
+		printGood "Veil folder exists, moving on."
+	fi
+
+	# Download PowerSploit
+	echo; printStatus "INSTALLING Powersploit"
+	if [[ $internet == 1 ]] && [[ -f $powersploitDir/.git ]]; then
+		echo; printStatus "Powersploit exists, updating from GitHub."
+		cd $powersploitDir; git pull
+	fi
+	if [[ ! -d "$powersploitDir" ]]; then
+		printStatus "PowerSploit folder does not exist."
+		echo; $powersploitDownload
+		commandStatus
+	else
+		printGood "PowerSploit folder exists, moving on."
+	fi
+
+	# Download Cobalt Strike C2 Profiles
+	echo; printStatus "INSTALLING Cobaltstrike C2 Profiles"
+	if [[ $internet == 1 ]] && [[ -f $c2profilesDir/.git ]]; then
+		echo; printStatus "Cobalt Strike C2 Profiles exist, updating from GitHub."
+		cd $c2profilesDir; git pull
+	fi
+	if [[ ! -d "$c2profilesDir" ]]; then
+		printStatus "Cobaltstrike c2profiles folder does not exist."
+		echo; $c2profilesDownload
+		commandStatus
+	else
+		printGood "Cobalstrike c2profiles folder exists, moving on."
+	fi
+
+	# Download Cobalt Strike
+	echo; printStatus "INSTALLING Cobaltstrike"
+	if [[ ! -f "$cobaltstrikeDir/teamserver" ]] && [[ $internet == "0" ]]; then
+		printError "Cobaltstrike folder does not exist."
+		echo; $cobaltstrikeDownload
+		commandStatus
+	else
+		printGood "Cobalstrike folder exists, moving on."
+	fi
+
+	# Download Sublime
+	setupSublimeText
+
+	# Show status of local software repo
+	offlineSoftwareRepoStatus
+}
+
+# Show status of local software repo
+offlineSoftwareRepoStatus(){
+	echo; printStatus "Offline software repository status:"
+	echo "---------------------------------------"
+	if [[ -f $localSoftwareDir/sublime32.deb ]]; then printGood "Sublime 32-bit"; else printError "Sublime 32-bit"; fi
+	if [[ -f $localSoftwareDir/sublime64.deb ]]; then printGood "Sublime 64-bit"; else printError "Sublime 64-bit"; fi
+	if [[ -f $localSoftwareDir/cobaltstrike.zip ]]; then printGood "Cobalt Strike"; else printError "Cobalt Strike"; fi
+	if [[ -f $localSoftwareDir/c2profiles.zip ]]; then printGood "C2 Profiles"; else printError "C2 Profiles"; fi
+	if [[ -f $localSoftwareDir/powersploit.zip ]]; then printGood "Powersploit"; else printError "Powersploit"; fi
+	if [[ -f $localSoftwareDir/veil.zip ]]; then printGood "Veil"; else printError "Veil"; fi
+	echo
 }
 
 # Find the IP addresses in use
@@ -316,8 +404,7 @@ listIPs-oneline(){
 
 # Tests IP for connectivity
 pingTest(){
-	if [ `which fping` ]
-	then
+	if [[ `which fping` ]]; then
 		$fping -c 1 $unusedip || echo $unusedip/$subnet >> /tmp/ips.txt
 	else
 		$ping -c 1 -w 0.5 $unusedip || echo "Available IP: "$unusedip; echo $unusedip/$subnet mtu $mtu >> /tmp/ips.txt
@@ -339,7 +426,7 @@ whatMTU(){
 	else
 		echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
 	fi
-	if [ -z ${mtu:+x} ]; then
+	if [[ -z ${mtu:+x} ]]; then
 		printGood "Setting mtu of $defaultMTU."
 		mtu=$defaultMTU
 	fi
@@ -354,7 +441,7 @@ removeSubInts(){
 	$ifconfig $sub down > /dev/null 2>&1
 	done < "/tmp/sub.txt"
 
-	if [ -s /tmp/sub.txt ]; then
+	if [[ -s /tmp/sub.txt ]]; then
 		echo; printStatus "[-]Removed subinterface(s):"
 		cat /tmp/sub.txt
 		rm /tmp/sub.txt > /dev/null 2>&1
@@ -462,7 +549,7 @@ addSubInts(){
 # Check for subinterfaces
 checkForSubinterfaces(){
 	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
-	if [ ! -s /tmp/sub.txt ]; then
+	if [[ ! -s /tmp/sub.txt ]]; then
 		echo; read -p "No subinterfaces exist...would you like to create some? (y/n) " -n 1 -r
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			addSubInts
@@ -482,7 +569,7 @@ checkForSubinterfaces(){
 restoreSubIntsFile(){
 	# Identify the subinterfaces save file
 	echo; printQuestion "What is the full path to the setips save file (default is $ipsSaved)?"; read savefile || return
-	if [ -z ${savefile:+x} ]; then
+	if [[ -z ${savefile:+x} ]]; then
 		printGood "Restoring from $ipsSaved."
 		savefile=$ipsSaved
 	else
@@ -502,7 +589,7 @@ setGateway(){
 	echo
 	currentgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 	gatewayip=$currentgw
-	if [ -z ${currentgw:+x} ]; then
+	if [[ -z ${currentgw:+x} ]]; then
 		echo; printError "You do not have a default gateway set."
 	else
 		echo; printStatus "Your current gateway is:  $gatewayip"
@@ -515,7 +602,7 @@ setGateway(){
 		# Add new gw
 		route add default gw $gatewayip
 		newgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-		if [ -z ${newgw:+x} ]; then
+		if [[ -z ${newgw:+x} ]]; then
 			echo; printError "Something went wrong...check your desired gateway."
 		else
 			echo; printGood "Your gateway was updated to:  $newgw"; echo
@@ -552,7 +639,7 @@ autoSetIPsOnStart(){
 	$ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $1 " " $NF }' | sed -e "s/$/\/$subnet/" | sed "/lo/d" > $ipsSaved
 	removeSetIPsOnStart
 	gatewayip=`route -n|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-	if [ ! -z ${gateway:+x} ]; then
+	if [[ ! -z ${gateway:+x} ]]; then
 		setGateway
 	fi
 	sed "s,%SETIPSFOLDER%,$setipsFolder,g;s,%GATEWAYIP%,$gatewayip,g" >$setipsFolder/setips-atboot.sh << 'EOF'
@@ -842,135 +929,86 @@ setupSocatPivot(){
 # Setup Cobaltstrike Teamserver
 setupTeamserver(){
 	trap ctrlC INT
-	distro=`cat /etc/os-release | grep ID=kali | wc -l`
-	if [[ $distro == "0" ]]; then
-		echo; printError "This install/setup requires Kali...exiting."
-		break
+
+	# Check for installed software
+	installAdditionalSoftware
+
+	# Startup teamserver
+	coreIPAddr=$(listCoreIPAddr)
+	echo; printError "What teamserver password would you like to use?"; read teamPass
+
+	# Ask if you will use a c2profile with the teamserver
+	echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		c2profile=""
+		cd $c2profilesDir; ls -R *; cd
+		echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
+		c2profile=`find $c2profilesDir/ -name $c2profile`
+	fi
+
+#	# Populate tables in background - OLD v2 setup that required msfprcd
+#	msfrpcdpid=`ps aux|grep msfrpcd|head -n 1|awk '{ print $2 }'`
+#	kill -9 $msfrpcdpid
+#	service postgresql start
+#	service metasploit start
+#	service metasploit stop
+
+	printStatus "If the teamserver fails to start, correct the issues and then type this command from the cobaltstrike folder:"
+	echo "    ./teamserver $coreIPAddr $teamPass $c2profile"
+	cd $cobaltstrikeDir; ./teamserver $coreIPAddr $teamPass $c2profile
+}
+
+# Install highly recommended tools
+installRecommendedTools(){
+	downloadError=0
+	echo; printStatus "Attempting to install:  unzip, fping, ipcalc, socat, libreadline5, screen"
+	apt-get -y install unzip fping ipcalc socat libreadline5 screen
+	commandStatus
+	if [[ $downloadError == 1 ]]; then 
+		echo; printError "Something went wrong...one or more downloads didn't complete successfully." 
 	else
-		# Online install 
-		if [[ $internet == "1" ]]; then
-			# Check for dependencies
-			if ! which unzip > /dev/null; then
-				echo; printError "The program unzip is not installed...downloading now."
-			apt-get -y install unzip
-			fi
-		fi
-		# Offline install
-		if [[ $internet == "0" ]]; then
-			echo; printQuestion "What is the password to the network share (press enter if blank)?"; read -s redteamSharePassword
-		fi
-
-		# Identify interface
-		whatInterface
-		# Change directory to $HOME directory of current user (most likely root)
-		cd $HOME
-		# Download Veil
-		echo; $veilDownload
-		commandStatus
-		if [[ -f $HOME/veil/Install.sh && $internet == "1" ]]; then
-			if [[ -d $veilDir/Veil-Evasion ]]; then
-				echo; printStatus "Veil exists, updating from GitHub."
-				/root/veil/Install.sh -u
-			else
-				echo; printStatus "Veil does not exist, installing from GitHub."
-				/root/veil/Install.sh -c
-			fi
-		fi
-		if [ ! -d $veilDir ]; then
-			echo; printStatus "Veil is unavailable."
-		else
-			echo; printGood "Veil folder exists, moving on."
-		fi
-
-		# Download PowerSploit
-		if [ ! -d "$powersploitDir" ]; then
-			echo; printError "PowerSploit folder does not exist."
-			echo; $powersploitDownload
-			commandStatus
-		else
-			echo; printGood "PowerSploit folder exists, moving on."
-		fi
-
-		# Download Cobalt Strike C2 Profiles
-		if [ ! -d "$c2profilesDir" ]; then
-			echo; printQuestion "Cobaltstrike c2profiles folder does not exist."
-			echo; $c2profilesDownload
-			commandStatus
-		else
-			echo; printGood "Cobalstrike c2profiles folder exists, moving on."
-		fi
-		# Ask if you will use a c2profile with the teamserver
-		echo; read -e -p "Would you like to use a c2profile (if you don't know what that is, type 'n')? (y/n) "
-		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			c2profile=""
-			cd $c2profilesDir; ls -R *; cd
-			echo; printError "What c2profile would you like to use? (enter just the name)"; read c2profile
-			c2profile=`find $c2profilesDir/ -name $c2profile`
-		fi
-
-		# Download Cobalt Strike
-		clear
-		if [ ! -f "$cobaltstrikeDir/teamserver" ]; then
-			if [[ $internet == "0" ]]; then
-				echo; printError "Cobaltstrike folder does not exist."
-				downloadOfflineSoftware
-				unzip -u $localSoftwareDir/cobaltstrike.zip -d $HOME/
-			else
-				printError "Cobaltstrike folder does not exist...you will need to download/decompress to $HOME/cobaltstrike."
-			fi
-		else
-			echo; printGood "Cobalstrike folder exists, moving on."
-		fi
-
-		# Startup teamserver
-		coreIPAddr=$(listCoreIPAddr)
-		echo; printError "What teamserver password would you like to use?"; read teamPass
-		# Populate tables in background
-	#	msfrpcdpid=`ps aux|grep msfrpcd|head -n 1|awk '{ print $2 }'`
-	#	kill -9 $msfrpcdpid
-	#	service postgresql start
-	#	service metasploit start
-	#	service metasploit stop
-		printStatus "If the teamserver fails to start, correct the issues and then type this command from the cobaltstrike folder:"
-		echo "    ./teamserver $coreIPAddr $teamPass $c2profile"
-		cd $cobaltstrikeDir; ./teamserver $coreIPAddr $teamPass $c2profile
+		echo; printGood "Done."
 	fi
 }
 
 # Setup Sublime Text
 setupSublimeText(){
-	if [[ $internet = "1" ]]; then
-		echo; printStatus "Downloading Sublime Text installer."
-		if [[ $(uname -m) == "x86_64" ]]; then
-			wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O $localSoftwareDir/sublime64.deb
-			commandStatus
-			sublimeInstaller=$localSoftwareDir/sublime64.deb
-		else
-			wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O $localSoftwareDir/sublime32.deb
-			commandStatus
-			sublimeInstaller=$localSoftwareDir/sublime32.deb
-		fi
+	if [[ ! -f /opt/sublime_text/sublime_text ]]; then
+		if [[ $internet = "1" ]]; then
+			echo; printStatus "Downloading Sublime Text installer."
+			if [[ $(uname -m) == "x86_64" ]]; then
+				$sublime64Download
+				commandStatus
+				sublimeInstaller=$localSoftwareDir/sublime64.deb
+			else
+				$sublime32Download
+				commandStatus
+				sublimeInstaller=$localSoftwareDir/sublime32.deb
+			fi
 # Not working :(
 #		add-apt-repository ppa:webupd8team/sublime-text-3
 #		apt-get update
 #		apt-get install sublime-text-installer
-	else
-		if [[ $(uname -m) == "x86_64" ]]; then
-			if [[ -f $sublime64Download ]]; then
-				echo; printError "Sublime 64-bit offline installer does not exist."
-				downloadOfflineSoftware
-			fi
-			sublimeInstaller=$localSoftwareDir/sublime64.deb
 		else
-			if [[ -f $sublime32Download ]]; then
-				echo; printError "Sublime 32-bit offline installer does not exist."
-				downloadOfflineSoftware
+			if [[ $(uname -m) == "x86_64" ]]; then
+				if [[ -f $sublime64Download ]]; then
+					echo; printError "Sublime 64-bit offline installer does not exist."
+					downloadOfflineSoftwareRepo
+				fi
+				sublimeInstaller=$localSoftwareDir/sublime64.deb
+			else
+				if [[ -f $sublime32Download ]]; then
+					echo; printError "Sublime 32-bit offline installer does not exist."
+					downloadOfflineSoftwareRepo
+				fi
+				sublimeInstaller=$localSoftwareDir/sublime32.deb
 			fi
-			sublimeInstaller=$localSoftwareDir/sublime32.deb
 		fi
+		echo; printStatus "Installing Sublime Text."
+		dpkg -i $sublimeInstaller
+	else
+		printGood "SublimeText is already installed."
 	fi
-	echo; printStatus "Installing Sublime Text."
-	dpkg -i $sublimeInstaller
 }
 
 # Loop function to redisplay menu
@@ -1037,9 +1075,9 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "Setup-Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Main-Menu"; do
+		select au in "Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-Powersploit" "Main-Menu"; do
 			case $au in
-				Setup-Static-IP )
+				Static-IP )
 				setupStaticIP
 				break
 				;;
@@ -1080,6 +1118,12 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 				SublimeText )
 				setupSublimeText
+				break
+				;;
+
+				Cobaltstrike-C2Profiles-Veil-Powersploit )
+				downloadOfflineSoftwareRepo
+				installAdditionalSoftware
 				break
 				;;
 
@@ -1131,7 +1175,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Main-Menu"; do
+		select ut in "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Install-Recommended-Tools" "Show-OFFLINE-Software-Repo-Status" "Main-Menu"; do
 			case $ut in
 				Display-IPTables )
 				displayIPTables
@@ -1197,6 +1241,16 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				break
 				;;
 
+				Install-Recommended-Tools )
+				installRecommendedTools
+				break
+				;;
+
+				Show-OFFLINE-Software-Repo-Status )
+				offlineSoftwareRepoStatus
+				break
+				;;
+
 				Main-Menu )
 				break
 				;;
@@ -1243,7 +1297,7 @@ done
 }
 
 printHelp(){
-	echo "Usage: [-h] [-i] [-l] [-r] [-s <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
+	echo "Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
 	echo; echo "Examples:"
@@ -1255,7 +1309,7 @@ printHelp(){
 	echo "List current IPTables rules."
 	echo; echo "./setips.sh -r"
 	echo "Repair current IPTables ruleset by removing duplicates, removing rules that conflict with SNAT source IP manipulation, and saving a backup."
-	echo; echo "./setips.sh -s <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
+	echo; echo "./setips.sh -a <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
 	echo "Add single IPTables rule - by default, it will append to the iptables file."
 	echo; echo "./setips.sh -d <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
 	echo "Delete single IPTables rule matching the input."
@@ -1273,8 +1327,19 @@ printHelp(){
 
 # MAIN MENU
 echo; echo "Setips Script - version $version"
+printGood "Started:  $(date)"
+printGood "Logging enabled:  $setipsFolder/setips.log"
+
 # Check /etc/rc.local for the execute bit
 chmod +x /etc/rc.local
+
+# Check that we're root
+if [[ $UID -ne 0 ]]; then
+        print_error "Superuser (i.e. root) privileges are required to run this script."
+        exit 1
+fi
+
+# Check OS version
 osCheck
 
 # Determine the operational mode - ONLINE or OFFLINE
@@ -1304,19 +1369,40 @@ if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; th
 	fi
 fi
 
-# Download recommended software to improve script performance
-downloadOfflineSoftware
-
 if [[ $1 = "" || $1 = "--help" ]]; then
 	echo; printHelp >&2
 	exit 1
 else
 	IAM=${0##*/} # Short basename
-	while getopts ":d:f:hilrs:tux:z" opt
+	while getopts ":a:d:f:hilrstux:z" opt
 	do sc=0 #no option or 1 option arguments
 		case $opt in
+		(a) # IMPORT - Quick entry to iptables src nat
+			if [[ $# -lt $((OPTIND + 1)) ]]; then
+				ec!ho "$IAM: Option -s argument(s) missing...needs five!" >&2
+				echo; printHelp >&2
+				exit 2
+			fi
+			OPTINDplus1=$((OPTIND + 1))
+			OPTINDplus2=$((OPTIND + 2))
+			OPTINDplus3=$((OPTIND + 3))
+			protocol=$OPTARG
+			eval subintip=\$$OPTIND
+			eval subintport=\$$OPTINDplus1
+			eval tgtip=\$$OPTINDplus2
+			eval tgtport=\$$OPTINDplus3
+			#Clean old masquerade way of doing SRC NAT
+			$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
+			$iptables -t filter -I FORWARD 1 -j ACCEPT
+			randomizePivotIP >&2
+			printGood "Imported rule specified."
+			cleanIPTables >&2
+			saveIPTables >&2
+			echo
+			sc=4 #5 args
+			;;
 		(d) # DELETE - Quick delete iptables rule
-			if [ $# -lt $((OPTIND + 1)) ]; then
+			if [[ $# -lt $((OPTIND + 1)) ]]; then
 				echo "$IAM: Option -d argument(s) missing...needs five!" >&2
 				echo; printHelp >&2
 				exit 2
@@ -1373,10 +1459,6 @@ else
 		(r) # REPAIR - quick repair; doesn't hurt if run multiple times.
 			printGood "Cleaning up/repair the current IPTables ruleset."
 			printGood "Saving backup of your IPTables before repair attempt to $iptablesBackup/$iptablesBackupfile"
-			sed -i '/#setips - Auto-set IPs on startup/d' /etc/rc.local
-			whatMTU
-			echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)? "; read subnet
-			echo $subnet > $setipsFolder/subnet.current
 			iptables-save > $iptablesBackup/$iptablesBackupfile
 			cleanIPTables >&2
 			autoStartIPTables >&2
@@ -1384,29 +1466,22 @@ else
 			saveIPTables >&2
 			printGood "Repair complete, saving IPTables backup...run './setips.sh -l' to view current IPTables."
 			;;
-		(s) # IMPORT - Quick entry to iptables src nat
-			if [ $# -lt $((OPTIND + 1)) ]; then
-				ec!ho "$IAM: Option -s argument(s) missing...needs five!" >&2
-				echo; printHelp >&2
-				exit 2
-			fi
-			OPTINDplus1=$((OPTIND + 1))
-			OPTINDplus2=$((OPTIND + 2))
-			OPTINDplus3=$((OPTIND + 3))
-			protocol=$OPTARG
-			eval subintip=\$$OPTIND
-			eval subintport=\$$OPTINDplus1
-			eval tgtip=\$$OPTINDplus2
-			eval tgtport=\$$OPTINDplus3
-			#Clean old masquerade way of doing SRC NAT
-			$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
-			$iptables -t filter -I FORWARD 1 -j ACCEPT
-			randomizePivotIP >&2
-			printGood "Imported rule specified."
-			cleanIPTables >&2
-			saveIPTables >&2
+		(s) # Setup offline software repository
+			cd $localSoftwareDir
+			echo; printStatus "Installing software."
+			installRecommendedTools >&2
+			downloadOfflineSoftwareRepo >&2
+			installAdditionalSoftware >&2
+			$sublime32Download
+			$sublime64Download
+			echo; printStatus "Zip'ing and moving software to folder:  $localSoftwareDir"
+			echo; zip -ur $localSoftwareDir/cobaltstrike.zip $HOME/cobaltstrike
+			echo; zip -ur $localSoftwareDir/c2profiles.zip $HOME/c2profiles
+			echo; zip -ur $localSoftwareDir/veil.zip $HOME/veil
+			echo; zip -ur $localSoftwareDir/powersploit.zip $HOME/powersploit
+			offlineSoftwareRepoStatus
+			echo; printGood "OFFLINE Software Repo setup --> $localSoftwareDir"
 			echo
-			sc=4 #5 args
 			;;
 		(t) # Testing script
 			testingScript >&2
@@ -1445,7 +1520,7 @@ else
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
 			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/snort-rules/
-			if [ $# -lt $((OPTIND)) ]; then
+			if [[ $# -lt $((OPTIND)) ]]; then
 				echo "$IAM: Option -x argument(s) missing...needs 2!" >&2
 				echo; printHelp >&2
 				exit 2
@@ -1533,9 +1608,10 @@ else
 			exit 1
 			;;
 		esac
-		if [ $OPTIND != 1 ]; then #This test fails only if multiple options are stacked after a single "-"
+		if [[ $OPTIND != 1 ]]; then #This test fails only if multiple options are stacked after a single "-"
 			shift $((OPTIND - 1 + sc))
 			OPTIND=1
 		fi
 	done
 fi
+sed -i '/=======/d' $setipsFolder/setips.log
