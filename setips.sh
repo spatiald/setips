@@ -24,7 +24,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
-version=2
+version=BETA
 defaultMTU=1300 # Normal is 1500, Exercises are normally 1300
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
@@ -1201,14 +1201,17 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				Change-Internet-OpMode )
 				if [[ `cat $0 | grep '^internet="" #'` ]]; then
 					sed -i 's/^internet="" #/internet="0" #/' $0
+					internet="0"
 					echo; printGood "Internet mode set to OFFLINE."
 
 				elif [[ `cat $0 | grep '^internet="0" #'` ]]; then
 					sed -i 's/^internet="0" #/internet="1" #/' $0
+					internet="1"
 					echo; printGood "Internet mode set to ONLINE."
 
 				elif [[ `cat $0 | grep '^internet="1" #'` ]]; then
 					sed -i 's/^internet="1" #/internet="" #/' $0
+					internet=""
 					echo; printGood "Internet mode set to ASK EACH TIME."
 				fi
 				break
@@ -1368,7 +1371,7 @@ printHelp(){
 }
 
 # MAIN MENU
-echo; echo "Setips Script - version $version"
+echo; echo "Setips Script - Version $version"
 printGood "Started:  $(date)"
 printGood "Logging enabled:  $setipsFolder/setips.log"
 
@@ -1533,19 +1536,26 @@ else
 			testingScript >&2
 			;;
 		(u) # UPDATE - Update setips.sh to the latest release build.
-			echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
-			setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetips -O $setipsUpdateFileDownloadLocation.tmp"
-			$setipsDownloadLink >&2
-			if [[ -s $setipsUpdateFileDownloadLocation.tmp ]]; then
-				mv $setipsUpdateFileDownloadLocation $setipsFolder/setips.sh.last
-				mv $setipsUpdateFileDownloadLocation.tmp $setipsUpdateFileDownloadLocation
-				chmod +x $setipsUpdateFileDownloadLocation
-				printGood "Success! Downloaded update to /root/setips.sh"
+			if [[ $internet == 1 ]]; then
+				wget https://github.com/spatiald/setips/raw/master/setips.sh -O setips.sh
+				commandStatus
+				chmod +x setips.sh
+				if [[ -f ./setips.sh ]]; then echo; printGood "setips.sh downloaded to your current folder."; fi
 			else
-				printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
-				echo "$setipsDownloadLink"
-				echo
-				exit 1
+				echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
+				setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetips -O $setipsUpdateFileDownloadLocation.tmp"
+				$setipsDownloadLink >&2
+				if [[ -s $setipsUpdateFileDownloadLocation.tmp ]]; then
+					mv $setipsUpdateFileDownloadLocation $setipsFolder/setips.sh.last
+					mv $setipsUpdateFileDownloadLocation.tmp $setipsUpdateFileDownloadLocation
+					chmod +x $setipsUpdateFileDownloadLocation
+					printGood "Success! Downloaded update to /root/setips.sh"
+				else
+					printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
+					echo "$setipsDownloadLink"
+					echo
+					exit 1
+				fi
 			fi
 			;;
 		(z) # UPDATE - Update setips.sh to the latest beta build.
