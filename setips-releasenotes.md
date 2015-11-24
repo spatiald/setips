@@ -1,16 +1,9 @@
 # setips.sh RELEASE NOTES
 
-## Download
-
-`NOTE:  To download setips.sh from the command line: 
-For the release verison, use the following from any linux system on red net:  
-```wget --http-user=user --http-password=ExercisePassword \```
-```http://wiki.rt/current-wiki/linux/setips.sh; chmod +x setips.sh```
-For the BETA verison, use the following from any linux system on red net:  
-```wget --http-user=user --http-password=ExercisePassword \```
-```http://wiki.rt/current-wiki/linux/setips-beta.sh -O setips.sh; chmod +x setips.sh```
-
 ## Current Version
+Version: '2.0 (2015Nov24-1433)'
+- Updates galore...review the menus to see new options
+
 Version: '1.11 (2015Jun18-0002)'
 - Lots o' bug fixes
 - Added ability to update to BETA version with './setips.sh -z'
