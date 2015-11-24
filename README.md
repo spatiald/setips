@@ -2,7 +2,7 @@
 
 ## Howto
 ```
-Usage: [-h] [-i] [-l] [-r] [-s <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
+Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
        [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
        [-u] [-x <victim IP> <# of threads>] [-z]
 ```
@@ -29,7 +29,7 @@ Repair current IPTables ruleset by removing duplicates, removing rules that conf
 
 Add single IPTables rule - by default, it will append to the iptables file.
 ```bash
-./setips.sh -s <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>
+./setips.sh -a <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>
 ```
 
 Delete single IPTables rule matching the input.
