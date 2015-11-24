@@ -24,7 +24,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
-version=2.0
+version=BETA
 defaultMTU=1300 # Normal is 1500, Exercises are normally 1300
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
@@ -1542,6 +1542,7 @@ else
 				chmod +x setips.sh
 				if [[ -f ./setips.sh ]]; then echo; printGood "setips.sh downloaded to your current folder."; fi
 			else
+				echo; printStatus "You are currently in OFFLINE mode."
 				echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
 				setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetips -O $setipsUpdateFileDownloadLocation.tmp"
 				$setipsDownloadLink >&2
