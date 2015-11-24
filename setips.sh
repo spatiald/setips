@@ -24,7 +24,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 # Commonly changed variables
 # DON'T FORGET to adjust the variables in the function "offlineVariables" below
-version=BETA
+version=2.0
 defaultMTU=1300 # Normal is 1500, Exercises are normally 1300
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
