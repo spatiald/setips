@@ -1542,6 +1542,7 @@ else
 				chmod +x setips.sh
 				if [[ -f ./setips.sh ]]; then echo; printGood "setips.sh downloaded to your current folder."; fi
 			else
+				echo; printStatus "You are currently in OFFLINE mode."
 				echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
 				setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetips -O $setipsUpdateFileDownloadLocation.tmp"
 				$setipsDownloadLink >&2
