@@ -33,7 +33,7 @@ cobaltstrikeDir="$HOME/cobaltstrike"
 c2profilesDir="$HOME/c2profiles"
 veilDir="$HOME/veil"
 powersploitDir="$HOME/powersploit"
-redteamShare="http://172.31.0.100" #http://share.com/remote.php/webdav/software
+redteamShare="http://192.168.1.1" #http://share.com/remote.php/webdav/software
 #redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
 redteamShareUser="redteam"
 #offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
@@ -136,7 +136,7 @@ testingScript(){
 
 osCheck(){
 	if [[ -z "$os" ]] || [[ -z "$osVersion" ]]; then
-	  printError " [ERROR] Internal Issue. Couldn't Detect OS Information."
+	  printError "Internal Issue. Couldn't Detect OS Information."
 	elif [[ "$os" == "kali" ]]; then
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
 	elif [[ "$os" == "ubuntu" ]]; then
