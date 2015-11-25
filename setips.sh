@@ -136,7 +136,7 @@ testingScript(){
 
 osCheck(){
 	if [[ -z "$os" ]] || [[ -z "$osVersion" ]]; then
-	  printError " [ERROR] Internal Issue. Couldn't Detect OS Information."
+	  printError "Internal Issue. Couldn't Detect OS Information."
 	elif [[ "$os" == "kali" ]]; then
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
 	elif [[ "$os" == "ubuntu" ]]; then
