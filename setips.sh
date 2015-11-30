@@ -11,7 +11,7 @@
 # Highly recommended tools to install (can be installed with script via Option 3 then 13):
 # apt-get -y install unzip fping ipcalc socat libreadline5 screen
 #
-# Offline programs to put on local storage/web server.
+# Offline programs to put on local storage/web server under root folder called software (e.g. http://192.168.1.1/software)
 # These files can be prepped in ONLINE mode via undocumented feature --> run this:  ./setips.sh -s
 # - sublime32/64.deb
 # - cobaltstrike.zip
@@ -21,39 +21,69 @@
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+version=2.1
+setipsFolder="$HOME/setips-files"
 
-# Commonly changed variables
-# DON'T FORGET to adjust the variables in the function "offlineVariables" below
-version=2.0
+createConfig(){
+	cat > $setipsFolder/setips.conf << 'EOF'
 defaultMTU=1300 # Normal is 1500, Exercises are normally 1300
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
 localSoftwareDir="$HOME/software" # Location where you want your downloaded software located
-cobaltstrikeDir="$HOME/cobaltstrike"
-c2profilesDir="$HOME/c2profiles"
-veilDir="$HOME/veil"
-powersploitDir="$HOME/powersploit"
-redteamShare="http://192.168.1.1" #http://share.com/remote.php/webdav/software
-#redteamShare="http://share.com/remote.php/webdav" # NO trailing slash
-redteamShareUser="redteam"
-#offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
-offlineDownloadServer="wget --show-progress -c -nH -r --no-parent -e robots=off --reject "index.html*" $redteamShare/software/"
-redteamWiki="http://wiki.rt/current-wiki"
-redteamWikiUser="redteam"
-redteamPathToUpdateSetips="linux/setips.sh"
-redteamPathToUpdateSetipsBeta="linux/setips-beta.sh"
-redteamPathToPullSnortRules="scripts/snort.rules"
-snortRulesFile="snort.rules"
-snortRulesDirectory="$HOME/snort-rules"
-snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile"
-setipsUpdateFileDownloadLocation="$HOME/setips.sh"
+cobaltstrikeDir="$HOME/cobaltstrike" # Cobaltstrike folder
+c2profilesDir="$HOME/c2profiles" # Cobaltstrike C2 Profiles folder
+veilDir="$HOME/veil" # Veil folder
+empireDir="$HOME/empire"
+powersploitDir="$HOME/powersploit" # Powersploit folder
+redteamShareAuth="0" # "0"=No user auth, "1"=Use user auth
+redteamShare="" #e.g. 192.168.1.1 or share.com/remote.php/webdav/software
+redteamShareUser="redteam" # Redteam share user
+redteamWikiAuth="0" # "0"=No user auth, "1"=Use user auth
+redteamWiki="http://wiki.rt/current-wiki" # Redteam wiki full web address
+redteamWikiUser="redteam" # Redteam wiki user
+redteamPathToUpdateSetips="linux/setips.sh" # Path on Redteam wiki to retrieve setips.sh script
+redteamPathToUpdateSetipsBeta="linux/setips-beta.sh" # Path on Redteam wiki to retrieve setips.sh beta script
+setipsUpdateFileDownloadLocation="$HOME/setips.sh" # Path to setips.sh script download location
+redteamPathToPullSnortRules="scripts/snort.rules" # Path on Redteam wiki to retrieve snort rules file
+snortRulesFile="snort.rules" # What we should call the downloaded snort rules file on local system
+snortRulesDirectory="$HOME/snort-rules" # Path to snort rules FOLDER on local system (not a file)
+snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system
+EOF
+}
+
+# ONLY CHANGE the following variables in the config file -> $setipsFolder/setips.conf
+# If it doesn't exist, create config file
+if [[ ! -f $setipsFolder/setips.conf ]]; then
+	createConfig
+elif [[ `wc -l < $setipsFolder/setips.conf` != 22 ]]; then # Sanity check the number of lines in config file 
+	createConfig
+fi
+
+### Import config file
+configFile="$setipsFolder/setips.conf"
+configFileClean="/tmp/setips.conf"
+# check if the file contains something we don't want
+if egrep -q -v '^#|^[^ ]*=[^;]*' "$configFile"; then
+  echo "Config file is unclean, cleaning it..." >&2
+  # filter the original to a new file
+  egrep '^#|^[^ ]*=[^;&]*'  "$configFile" > "$configFileClean"
+  configFile="$configFileClean"
+fi
+# now source it, either the original or the filtered variant
+source "$configFile"
 
 ### DO NOT CHANGE the following
+offlineServer(){
+	if [[ $redteamShareAuth == 1 ]]; then
+		offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
+	else
+		offlineDownloadServer="wget --show-progress -c -nH -r --no-parent -e robots=off --reject "index.html*" http://$redteamShare/software/"
+	fi
+}
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
 osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-setipsFolder="$HOME/setips-files"
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
 ipsArchive="$setipsFolder/ips-archive.txt" # IP archive listed by date/time for reference during exercises
 iptablesBackup="$setipsFolder/iptables"
@@ -74,6 +104,7 @@ onlineVariables(){
 	cobaltstrikeDownload=""
 	c2profilesDownload="git clone https://github.com/rsmudge/Malleable-C2-Profiles $c2profilesDir"
 	veilDownload="git clone https://github.com/Veil-Framework/Veil $veilDir"
+	empireDownload="git clone https://github.com/PowerShellEmpire/Empire.git $empireDir"
 	powersploitDownload="git clone https://github.com/mattifestation/PowerSploit $powersploitDir"
 	sublime32Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O $localSoftwareDir/sublime32.deb"
 	sublime64Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O $localSoftwareDir/sublime64.deb"
@@ -81,21 +112,23 @@ onlineVariables(){
 
 offlineVariables(){
 	socatDownload="apt-get -y install socat"
-	cobaltstrikeDownload="unzip -u $localSoftwareDir/cobaltstrike.tgz -d $HOME"
+	cobaltstrikeDownload="unzip -u $localSoftwareDir/cobaltstrike.zip -d $HOME"
 	c2profilesDownload="unzip -u $localSoftwareDir/c2profiles.zip -d $HOME"
 	veilDownload="unzip -u $localSoftwareDir/veil.zip -d $HOME"
+	empireDownload="unzip -u $localSoftwareDir/empireDir/powershellempire.zip -d $HOME"
 	powersploitDownload="unzip -u $localSoftwareDir/powersploit.zip -d $HOME"
 	sublime32Download="$localSoftwareDir/sublime32.deb"
 	sublime64Download="$localSoftwareDir/sublime64.deb"
 }
 
 buildSoftwareList(){
-    cat > $localSoftwareDir/software.lst << 'EOF'
+	cat > $localSoftwareDir/software.lst << 'EOF'
 sublime32.deb
 sublime64.deb
 cobaltstrike
 c2profiles
 veil
+empire
 powersploit
 EOF
 }
@@ -246,8 +279,8 @@ collectInfo(){
 		if [[ $ipcalc ]]; then
 			$ipcalc $currentCoreIP/$currentCoreNetmask | grep Netmask | cut -d" " -f6 > $setipsFolder/subnet.current
 		else
-			echo "Current netmask:  $currentCoreNetmask"
-			echo; printStatus "The force is not with me...I can't figure out the subnet you are on."
+			echo; printStatus "Current netmask:  $currentCoreNetmask"
+			echo; printStatus "The force is not with me...I can't figure out the subnet CIDR you are on."
 			printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)? "; read subnet
 			echo $subnet > $setipsFolder/subnet.current
 		fi
@@ -265,13 +298,17 @@ downloadOfflineSoftwareRepo(){
 			#	if [[ $internet == "0" ]]; then
 			#		echo; printQuestion "What is the password to the redteam network share (press enter if blank)?"; read -s redteamSharePassword
 			#	fi
+			if [[ -z $redteamShare ]]; then
+				echo; printQuestion "What is the IP/domain for the local server software repository?"; read redteamShare
+				sed -i 's/^redteamShare="" #/redteamShare="'$redteamShare'" #/' $setipsFolder/setips.conf
+			fi
+			offlineServer
 			$offlineDownloadServer
 			commandStatus
 			if [[ $downloadError == "1" ]]; then
 				echo; printError "Download failed! Check if the variable 'offlineDownloadServer' is set correctly."
 				echo "CAUTION:  Certain functions of this script will not work with these files."
 			fi
-			mv software $localSoftwareDir
 		else
 			echo; printStatus "User chose not to download/update their offline software repo."
 			echo "HINT:  You can set the variable 'downloadsoftware' to 0 to prevent this prompt"
@@ -299,10 +336,30 @@ installAdditionalSoftware(){
 	fi
 	if [[ ! -d $veilDir/Veil-Evasion ]]; then
 		printStatus "Veil folder does not exist.."
-		echo; $veilDownload
+		$veilDownload
 		commandStatus
 	else
-		printGood "Veil folder exists, moving on."
+		if [[ -d $veilDir/Veil-Evasion ]] && [[ -d $veilDir/Veil-Pillage ]] && [[ -d $veilDir/Veil-Catapult ]] && [[ -d $veilDir/Veil-Ordnance ]] && [[ -d $veilDir/PowerTools ]]; then
+			printGood "Veil folders exists, moving on."
+		else
+			printError "Not all Veil folders exist, master...attempting to fix."
+			$veilDir/Install.sh -c
+		fi
+	fi
+
+	# Download Powershell Empire
+	echo; printStatus "INSTALLING Powershell Empire"
+	if [[ $internet == 1 ]] && [[ -f $empireDir/.git ]]; then
+		echo; printStatus "Powershell Empire exists, updating from GitHub."
+		cd $empireDir; git pull
+	fi
+	if [[ ! -d "$empireDir" ]]; then
+		printStatus "Powershell Empire folder does not exist."
+		$empireDownload
+		commandStatus
+		$empireDir/setup/install.sh
+	else
+		printGood "Powershell Empire folder exists, moving on."
 	fi
 
 	# Download PowerSploit
@@ -313,7 +370,7 @@ installAdditionalSoftware(){
 	fi
 	if [[ ! -d "$powersploitDir" ]]; then
 		printStatus "PowerSploit folder does not exist."
-		echo; $powersploitDownload
+		$powersploitDownload
 		commandStatus
 	else
 		printGood "PowerSploit folder exists, moving on."
@@ -327,7 +384,7 @@ installAdditionalSoftware(){
 	fi
 	if [[ ! -d "$c2profilesDir" ]]; then
 		printStatus "Cobaltstrike c2profiles folder does not exist."
-		echo; $c2profilesDownload
+		$c2profilesDownload
 		commandStatus
 	else
 		printGood "Cobalstrike c2profiles folder exists, moving on."
@@ -335,16 +392,16 @@ installAdditionalSoftware(){
 
 	# Download Cobalt Strike
 	echo; printStatus "INSTALLING Cobaltstrike"
-	if [[ ! -f "$cobaltstrikeDir/teamserver" ]] && [[ $internet == "0" ]]; then
+	if [[ $internet == 0 ]] && [[ ! -f $cobaltstrikeDir/teamserver ]]; then
 		printError "Cobaltstrike folder does not exist."
-		echo; $cobaltstrikeDownload
+		$cobaltstrikeDownload
 		commandStatus
-	else
-		printGood "Cobalstrike folder exists, moving on."
 	fi
-
-	# Download Sublime
-	downloadSublimeText
+	if [[ -f "$cobaltstrikeDir/teamserver" ]]; then
+		printGood "Cobalstrike folder exists, moving on."
+	else
+		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you."
+	fi
 }
 
 # Setup Sublime Text
@@ -355,6 +412,7 @@ downloadSublimeText(){
 	else
 		sublimeInstaller=$localSoftwareDir/sublime32.deb
 	fi
+
 	if [[ $internet = "1" ]]; then
 		echo; printStatus "Downloading Sublime Text installer."
 		if [[ $(uname -m) == "x86_64" ]]; then
@@ -364,11 +422,15 @@ downloadSublimeText(){
 			$sublime32Download
 			commandStatus
 		fi
-	elif [[ ! -f $sublimeInstaller ]]; then
+	elif [[ $internet = "0" ]] && [[ ! -f $sublimeInstaller.zip ]] && [[ ! -f $sublimeInstaller ]]; then
 		downloadOfflineSoftwareRepo
-	elif [[ ! -f $sublimeInstaller.zip ]]; then
-		unzip $localSoftwareDir/sublime*.deb.zip -d $localSoftwareDir
-	elif [[ -f $sublimeInstaller ]]; then
+	fi
+
+	if [[ -f $sublimeInstaller.zip ]] && [[ ! -f $sublimeInstaller ]]; then
+		unzip -u $sublimeInstaller.zip -d $localSoftwareDir
+	fi
+
+	if [[ -f $sublimeInstaller ]]; then
 		echo; printGood "SublimeText installer downloaded."
 	else
 		echo; printError "I couldn't find the SublimeText installer...sorry."
@@ -377,6 +439,23 @@ downloadSublimeText(){
 		echo "   64-bit - $sublime64Download"
 		echo " - If OFFLINE, check the variable for the local software repo (offlineDownloadServer):"
 		echo "   $offlineDownloadServer"
+	fi
+}
+
+# Install SublimeText
+installSublime(){
+	if [[ ! -f /opt/sublime_text/sublime_text ]]; then
+		downloadSublimeText
+		echo; printStatus "Installing Sublime Text."
+		if [[ -f $sublimeInstaller.zip ]]; then unzip -u $sublimeInstaller.zip -d $localSoftwareDir ; fi
+		dpkg -i $sublimeInstaller
+		if [[ ! -f /opt/sublime_text/sublime_text ]]; then 
+			echo; printError "Something went wrong, check the log file:  $setipsFolder/setips.log"
+		else
+			echo; printGood "SublimeText installed successfully!"
+		fi
+	else
+		echo; printGood "SublimeText is already installed."
 	fi
 }
 
@@ -761,12 +840,13 @@ setupStaticIP(){
 			echo "dns-nameservers $dns" >> /etc/network/interfaces
 		fi
 		echo "# $ethInt STOP" >> /etc/network/interfaces
-		echo; read -p "Do you want to set another CORE interface with a static IP? (y/N)" -n 1 -r
+		echo; read -p "Do you want to setup another CORE interface with a static IP? (y/N)" -n 1 -r
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			configureStaticIP=1
 		else
 			configureStaticIP=0
 		fi
+		echo
 	done
 }
 
@@ -1085,10 +1165,16 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "Static-IP" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-Powersploit" "Main-Menu"; do
+		select au in "Initial" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit" "Static-IP" "Main-Menu"; do
 			case $au in
-				Static-IP )
+				Initial )
+				echo; printStatus "Setting up a static IP."
 				setupStaticIP
+				echo; printStatus "Install local system software repository and installing software."
+				downloadOfflineSoftwareRepo
+				installAdditionalSoftware
+				installSublime
+				echo; printGood "Initial setup completed."
 				break
 				;;
 
@@ -1126,26 +1212,18 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				;;
 
 				SublimeText )
-				if [[ ! -f /opt/sublime_text/sublime_text ]]; then
-					downloadSublimeText
-					echo; printStatus "Installing Sublime Text."
-					if [[ -f $sublimeInstaller.zip ]]; then unzip $sublimeInstaller.zip; fi
-					dpkg -i $sublimeInstaller
-					if [[ ! -f /opt/sublime_text/sublime_text ]]; then 
-						echo; printError "Something went wrong, check the log file:  $setipsFolder/setips.log"
-					else
-						echo; printGood "SublimeText installed successfully!"
-					fi
-				else
-					echo; printGood "SublimeText is already installed."
-				fi
-
+				installSublime
 				break
 				;;
 
-				Cobaltstrike-C2Profiles-Veil-Powersploit )
+				Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit )
 				downloadOfflineSoftwareRepo
 				installAdditionalSoftware
+				break
+				;;
+
+				Static-IP )
+				setupStaticIP
 				break
 				;;
 
@@ -1196,24 +1274,42 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Change-Internet-OpMode" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Install-Recommended-Tools" "Main-Menu"; do
+		select ut in "Change-Internet-OpMode" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Install-Recommended-Tools" "Create-Setips-Config" "Main-Menu"; do
 			case $ut in
 				Change-Internet-OpMode )
-				if [[ `cat $0 | grep '^internet="" #'` ]]; then
-					sed -i 's/^internet="" #/internet="0" #/' $0
-					internet="0"
-					echo; printGood "Internet mode set to OFFLINE."
+				echo; printStatus "Persistantly changes this script's operational mode (can be changed at any time)."
+				echo; printQuestion "What OpMode would you like to use:"
+				select om in "ONLINE" "OFFLINE" "ASK-EACH-TIME" "Main-Menu"; do
+					case $om in
+						ONLINE )
+						sed -i 's/^internet="" #/internet="1" #/' $setipsFolder/setips.conf
+						sed -i 's/^internet="0" #/internet="1" #/' $setipsFolder/setips.conf
+						internet="1"
+						opMode
+						break
+						;;
 
-				elif [[ `cat $0 | grep '^internet="0" #'` ]]; then
-					sed -i 's/^internet="0" #/internet="1" #/' $0
-					internet="1"
-					echo; printGood "Internet mode set to ONLINE."
+						OFFLINE )
+						sed -i 's/^internet="" #/internet="0" #/' $setipsFolder/setips.conf
+						sed -i 's/^internet="1" #/internet="0" #/' $setipsFolder/setips.conf
+						internet="0"
+						opMode
+						break
+						;;
 
-				elif [[ `cat $0 | grep '^internet="1" #'` ]]; then
-					sed -i 's/^internet="1" #/internet="" #/' $0
-					internet=""
-					echo; printGood "Internet mode set to ASK EACH TIME."
-				fi
+						ASK-EACH-TIME )
+						sed -i 's/^internet="0" #/internet="" #/' $setipsFolder/setips.conf
+						sed -i 's/^internet="1" #/internet="" #/' $setipsFolder/setips.conf
+						internet=""
+						opMode
+						break
+						;;
+
+						Main-Menu )
+						break
+						;;
+					esac
+				done
 				break
 				;;
 
@@ -1286,6 +1382,12 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				break
 				;;
 
+				Create-Setips-Config )
+				createConfig
+				echo; printGood "Setips config file created/recreated."
+				break
+				;;
+
 				Main-Menu )
 				break
 				;;
@@ -1335,38 +1437,16 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 
 		Quit )
 		echo; printGood "Exiting, nothing to do."; echo
-		exit 1
+		break
 		;;
 	esac
 done
 }
 
 printHelp(){
-	echo "Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
+	echo "setips.sh Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
-	echo; echo "Examples:"
-	echo "./setips.sh -h"
-	echo "Displays this help menu."
-	echo; echo "./setips.sh -i"
-	echo "Interactive mode."
-	echo; echo "./setips.sh -l"
-	echo "List current IPTables rules."
-	echo; echo "./setips.sh -r"
-	echo "Repair current IPTables ruleset by removing duplicates, removing rules that conflict with SNAT source IP manipulation, and saving a backup."
-	echo; echo "./setips.sh -a <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
-	echo "Add single IPTables rule - by default, it will append to the iptables file."
-	echo; echo "./setips.sh -d <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
-	echo "Delete single IPTables rule matching the input."
-	echo; echo "./setips.sh -f <file of SRC-NAT entries>"
-	echo "Add list of IPTables rules from file - Reads file and appends SRC-NAT rules to the iptables file."
-	echo "File Format, one entry per line:  <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
-	echo; echo "./setips -u"
-	echo "Update setips.sh scripts with RELEASE version from the Redteam wiki."
-	echo; echo "./setips -z"
-	echo "Update setips.sh scripts with BETA version from the Redteam wiki."
-	echo; echo "./setips.sh -x <target-IP> <#-of-threads>"
-	echo "Inundator - Setup subinterfaces (if necessary), run inudator to blind snort sensors but send all the default snort rules across their sensors."
 	echo
 }
 
@@ -1400,8 +1480,8 @@ fi
 if [[ ! -f "$localSoftwareDir/software.lst" ]]; then
 	mkdir -p $localSoftwareDir > /dev/null 2>&1
 	echo; printGood "Created $localSoftwareDir; all offline software is stored there."
-	buildSoftwareList
 fi
+buildSoftwareList
 
 # Ask to run interface setup or, if setup, collect information
 if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
@@ -1415,9 +1495,8 @@ if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; th
 	fi
 fi
 
-if [[ $1 = "" || $1 = "--help" ]]; then
-	echo; printHelp >&2
-	exit 1
+if [[ $1 == "" || $1 == "--help" ]]; then
+	echo; printHelp
 else
 	IAM=${0##*/} # Short basename
 	while getopts ":a:d:f:hilrstux:z" opt
@@ -1493,8 +1572,30 @@ else
 			echo
 			;;
 		(h) # Print help/usage statement
-			printHelp >&2
-			exit 1
+			echo; printHelp
+			echo; echo "Examples:"
+			echo "./setips.sh -h"
+			echo "Displays this help menu."
+			echo; echo "./setips.sh -i"
+			echo "Interactive mode."
+			echo; echo "./setips.sh -l"
+			echo "List current IPTables rules."
+			echo; echo "./setips.sh -r"
+			echo "Repair current IPTables ruleset by removing duplicates, removing rules that conflict with SNAT source IP manipulation, and saving a backup."
+			echo; echo "./setips.sh -a <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
+			echo "Add single IPTables rule - by default, it will append to the iptables file."
+			echo; echo "./setips.sh -d <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
+			echo "Delete single IPTables rule matching the input."
+			echo; echo "./setips.sh -f <file of SRC-NAT entries>"
+			echo "Add list of IPTables rules from file - Reads file and appends SRC-NAT rules to the iptables file."
+			echo "File Format, one entry per line:  <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>"
+			echo; echo "./setips -u"
+			echo "Update setips.sh scripts with RELEASE version from the Redteam wiki."
+			echo; echo "./setips -z"
+			echo "Update setips.sh scripts with BETA version from the Redteam wiki."
+			echo; echo "./setips.sh -x <target-IP> <#-of-threads>"
+			echo "Inundator - Setup subinterfaces (if necessary), run inudator to blind snort sensors but send all the default snort rules across their sensors."
+			echo
 			;;
 		(i) # Fully interactive mode
 			interactiveMode >&2
@@ -1513,23 +1614,31 @@ else
 			printGood "Repair complete, saving IPTables backup...run './setips.sh -l' to view current IPTables."
 			;;
 		(s) # Setup offline software repository
-			if [[ $os != "kali" ]]; then echo; printError "This setup must be run on Kali, exiting."; echo; exit 1; fi
+			if [[ $internet != 1 ]]; then echo; printError "You must be online to run this command."; echo; break; fi
+			if [[ $os != "kali" ]]; then echo; printError "This setup must be run on Kali, exiting."; echo; break; fi
 			cd $localSoftwareDir
 			echo; printStatus "Installing software."
-			installRecommendedTools >&2
-			downloadOfflineSoftwareRepo >&2
-			installAdditionalSoftware >&2
-			$sublime32Download
-			$sublime64Download
+			installRecommendedTools
+			downloadOfflineSoftwareRepo
+			installAdditionalSoftware
+			echo; $sublime32Download
+			echo; $sublime64Download
+			rm -rf $localSoftwareDir/*.zip
 			echo; printStatus "Zip'ing and moving software to folder:  $localSoftwareDir"
 			while read p; do
 				# Check $HOME directory
-				echo; zip -ur $localSoftwareDir/$p.zip $HOME/$p
+				cd $HOME
+				echo; zip $localSoftwareDir/$p.zip $p
 				# Check $localSoftwareDir directory
-				echo; zip -ur $localSoftwareDir/$p.zip $localSoftwareDir/$p
+				cd $localSoftwareDir
+				echo; zip $localSoftwareDir/$p.zip $p
 			done <$localSoftwareDir/software.lst
 			offlineSoftwareRepoStatus
 			echo; printGood "OFFLINE Software Repo setup --> $localSoftwareDir"
+			echo; printStatus "Sending software zip's to local server software repository."
+			printStatus "CAUTION: This command assumes you already have a folder on the local server in /var/www/html/software"
+			printQuestion "What is the IP of the local server (Ctrl-C to exit)?"; read softwareRepoIP
+			rsync -avh --progress $localSoftwareDir/*.zip root@$softwareRepoIP:/var/www/html/software
 			echo
 			;;
 		(t) # Testing script
@@ -1555,7 +1664,6 @@ else
 					printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
 					echo "$setipsDownloadLink"
 					echo
-					exit 1
 				fi
 			fi
 			;;
@@ -1572,7 +1680,6 @@ else
 				printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
 				echo "$setipsDownloadLink"
 				echo
-				exit 1
 			fi
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
@@ -1651,7 +1758,7 @@ else
 					exit 1
 				fi
 			done
-			exit 1		
+			exit 1
 			sc=1 #2 args
 			;;
 		(\?) #Invalid options
