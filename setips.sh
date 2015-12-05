@@ -23,6 +23,7 @@
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 version=2.1
 setipsFolder="$HOME/setips-files"
+numberConfigLines="22"
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -50,27 +51,6 @@ snortRulesDirectory="$HOME/snort-rules" # Path to snort rules FOLDER on local sy
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system
 EOF
 }
-
-# ONLY CHANGE the following variables in the config file -> $setipsFolder/setips.conf
-# If it doesn't exist, create config file
-if [[ ! -f $setipsFolder/setips.conf ]]; then
-	createConfig
-elif [[ `wc -l < $setipsFolder/setips.conf` != 22 ]]; then # Sanity check the number of lines in config file 
-	createConfig
-fi
-
-### Import config file
-configFile="$setipsFolder/setips.conf"
-configFileClean="/tmp/setips.conf"
-# check if the file contains something we don't want
-if egrep -q -v '^#|^[^ ]*=[^;]*' "$configFile"; then
-  echo "Config file is unclean, cleaning it..." >&2
-  # filter the original to a new file
-  egrep '^#|^[^ ]*=[^;&]*'  "$configFile" > "$configFileClean"
-  configFile="$configFileClean"
-fi
-# now source it, either the original or the filtered variant
-source "$configFile"
 
 ### DO NOT CHANGE the following
 offlineServer(){
@@ -1450,7 +1430,29 @@ printHelp(){
 	echo
 }
 
-# MAIN MENU
+# MAIN PROGRAM
+
+# ONLY CHANGE the following variables in the config file -> $setipsFolder/setips.conf
+# If it doesn't exist, create config file
+if [[ ! -f $setipsFolder/setips.conf ]]; then
+	createConfig
+elif [[ `wc -l < $setipsFolder/setips.conf` != $numberConfigLines ]]; then # Sanity check the number of lines in config file 
+	createConfig
+fi
+
+### Import config file
+configFile="$setipsFolder/setips.conf"
+configFileClean="/tmp/setips.conf"
+# check if the file contains something we don't want
+if egrep -q -v '^#|^[^ ]*=[^;]*' "$configFile"; then
+  echo "Config file is unclean, cleaning it..." >&2
+  # filter the original to a new file
+  egrep '^#|^[^ ]*=[^;&]*'  "$configFile" > "$configFileClean"
+  configFile="$configFileClean"
+fi
+# now source it, either the original or the filtered variant
+source "$configFile"
+
 echo; echo "Setips Script - Version $version"
 printGood "Started:  $(date)"
 printGood "Logging enabled:  $setipsFolder/setips.log"
