@@ -19,6 +19,12 @@
 # - powersploit.zip
 # - veil.zip
 
+# Fix backspace
+stty sane
+
+#in case you wish to kill it
+trap 'exit 3' 1 2 3 15
+
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 version=2.1
@@ -112,15 +118,6 @@ empire
 powersploit
 EOF
 }
-
-# Logging
-exec &> >(tee "$setipsFolder/setips.log")
-
-# Fix backspace
-stty sane
-
-#in case you wish to kill it
-trap 'exit 3' 1 2 3 15
 
 printGood(){
     echo -e "\x1B[01;32m[+]\x1B[0m $1"
@@ -1430,7 +1427,30 @@ printHelp(){
 	echo
 }
 
-# MAIN PROGRAM
+#### MAIN PROGRAM ####
+
+# Check /etc/rc.local for the execute bit
+chmod +x /etc/rc.local
+
+# Check that we're root
+if [[ $UID -ne 0 ]]; then
+        print_error "Superuser (i.e. root) privileges are required to run this script."
+        exit 1
+fi
+
+# Setup setips folder (for saving setips scripts/backup files)
+if [[ ! -d "$setipsFolder" ]]; then
+	mkdir -p $setipsFolder > /dev/null 2>&1
+	echo; printGood "Created $setipsFolder; all setips files are stored there."
+fi
+
+# Logging
+exec &> >(tee "$setipsFolder/setips.log")
+
+# Starting core script
+echo; echo "Setips Script - Version $version"
+printGood "Started:  $(date)"
+printGood "Logging enabled:  $setipsFolder/setips.log"
 
 # ONLY CHANGE the following variables in the config file -> $setipsFolder/setips.conf
 # If it doesn't exist, create config file
@@ -1453,30 +1473,11 @@ fi
 # now source it, either the original or the filtered variant
 source "$configFile"
 
-echo; echo "Setips Script - Version $version"
-printGood "Started:  $(date)"
-printGood "Logging enabled:  $setipsFolder/setips.log"
-
-# Check /etc/rc.local for the execute bit
-chmod +x /etc/rc.local
-
-# Check that we're root
-if [[ $UID -ne 0 ]]; then
-        print_error "Superuser (i.e. root) privileges are required to run this script."
-        exit 1
-fi
-
 # Check OS version
 osCheck
 
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
-
-# Setup setips folder (for saving setips scripts/backup files)
-if [[ ! -d "$setipsFolder" ]]; then
-	mkdir -p $setipsFolder > /dev/null 2>&1
-	echo; printGood "Created $setipsFolder; all setips files are stored there."
-fi
 
 # Setup local software folder (for offline software installs)
 if [[ ! -f "$localSoftwareDir/software.lst" ]]; then
