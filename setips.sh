@@ -1441,7 +1441,6 @@ fi
 # Setup setips folder (for saving setips scripts/backup files)
 if [[ ! -d "$setipsFolder" ]]; then
 	mkdir -p $setipsFolder > /dev/null 2>&1
-	echo; printGood "Created $setipsFolder; all setips files are stored there."
 fi
 
 # Logging
@@ -1450,7 +1449,7 @@ exec &> >(tee "$setipsFolder/setips.log")
 # Starting core script
 echo; echo "Setips Script - Version $version"
 printGood "Started:  $(date)"
-printGood "Logging enabled:  $setipsFolder/setips.log"
+printGood "Configuration and logging directory:  $setipsFolder"
 
 # ONLY CHANGE the following variables in the config file -> $setipsFolder/setips.conf
 # If it doesn't exist, create config file
