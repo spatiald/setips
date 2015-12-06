@@ -11,6 +11,18 @@ For the BETA verison, use the following from any linux system on red net:
 ```http://wiki.rt/current-wiki/linux/setips-beta.sh -O setips.sh; chmod +x setips.sh```
 
 ## Current Version
+- Add Powershell Empire
+- Add community.rules download/update to -x option
+- Bug fixes for OFFLINE mode
+
+Version: '2.1 (2015Dec5-1109)'
+- Add Inundator to Kali 2.0
+- Added setips config file (setips.conf)
+
+Version: '2.0 (2015Dec2-1753)'
+- Added exercise "OFFLINE" mode
+- Added global log file (setips.log)
+
 Version: '1.11 (2015Jun18-0002)'
 - Lots o' bug fixes
 - Added ability to update to BETA version with './setips.sh -z'

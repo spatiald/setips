@@ -236,6 +236,7 @@ checkInternet(){
 
 # Capture a users Ctrl-C
 ctrlC(){
+	stty sane
     echo; printError "Cancelled by user."
     echo; exit $?
 }
@@ -388,7 +389,11 @@ installAdditionalSoftware(){
 		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you."
 	fi
 
-	# Download/Install Inundator
+	downloadInundator
+}
+
+# Download/Install Inundator
+downloadInundator(){
 	echo; printStatus "INSTALLING Inundator"
 	if [[ ! `which inundator` ]]; then
 		printStatus "Inundator is not installed; installing now."
@@ -405,6 +410,7 @@ installAdditionalSoftware(){
 	echo; printStatus "INSTALLING/UPDATING Snort Community Rules"
 	$snortRulesDownload
 	tar xvzf $localSoftwareDir/community-rules.tar.gz community-rules/community.rules -C $localSoftwareDir
+	rm -rf $snortRulesDirectory
 	mv community-rules $localSoftwareDir
 }
 
@@ -1725,7 +1731,12 @@ else
 			fi
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
-			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/snort-rules/
+			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/community-rules/
+
+			# Install inundator, if not available (Kali 2.0)
+			# Also, download/update Snort Community Rules
+			downloadInundator
+
 			if [[ $# -lt $((OPTIND)) ]]; then
 				echo "$IAM: Option -x argument(s) missing...needs 2!" >&2
 				echo; printHelp >&2
@@ -1762,6 +1773,11 @@ else
 					fi
 				done
 			fi
+			# Check config file for correct rules path
+			sed -i '/snort/d' 
+			echo 'snortRulesFile="'$snortRulesFile'" # What we should call the downloaded snort rules file on local system/' >> $setipsFolder/setips.conf
+			echo 'snortRulesDirectory="'$snortRulesDirectory'" # Path to snort rules FOLDER on local system (not a file)/' >> $setipsFolder/setips.conf
+			echo 'snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system' >> $setipsFolder/setips.conf
 			echo; printStatus "You need to use a proxy to increase your effects. Select 'n' to use a different server redirector IP:port"
 			read -e -p "Do you want to setup a proxy on your local box (y/n)? " -r
 			while :; do
@@ -1790,6 +1806,8 @@ else
 					echo; read -e -p "ARE YOU SURE? (y/n) " -r
 					if [[ $REPLY =~ ^[Yy]$ ]]; then
 						echo; $inundator --thread $threads --proxy $proxy --rules $snortRulesDirectory --verbose $tgtIP
+						commandStatus
+						exit 1
 					elif [[ $REPLY =~ ^[Nn]$ ]]; then
 						exit 1
 					fi
