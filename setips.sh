@@ -30,6 +30,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 version=2.1
 setipsFolder="$HOME/setips-files"
 numberConfigLines="22"
+numberSoftwareLines="8"
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -94,6 +95,7 @@ onlineVariables(){
 	powersploitDownload="git clone https://github.com/mattifestation/PowerSploit $powersploitDir"
 	sublime32Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O $localSoftwareDir/sublime32.deb"
 	sublime64Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O $localSoftwareDir/sublime64.deb"
+	inundatorDownload="wget http://downloads.sourceforge.net/project/inundator/0.5/inundator_0.5_all.deb -O $localSoftwareDir/inundator_0.5_all.deb"
 }
 
 offlineVariables(){
@@ -105,6 +107,7 @@ offlineVariables(){
 	powersploitDownload="unzip -u $localSoftwareDir/powersploit.zip -d $HOME"
 	sublime32Download="$localSoftwareDir/sublime32.deb"
 	sublime64Download="$localSoftwareDir/sublime64.deb"
+	inundatorDownload="unzip -u $localSoftwareDir/inundator_0.5_all.deb.zip -d $localSoftwareDir"
 }
 
 buildSoftwareList(){
@@ -116,6 +119,7 @@ c2profiles
 veil
 empire
 powersploit
+inundator_0.5_all.deb
 EOF
 }
 
@@ -294,7 +298,7 @@ downloadOfflineSoftwareRepo(){
 }
 
 installAdditionalSoftware(){
-	downloadError=0	
+	downloadError=0
 	# Download Veil
 	echo; printStatus "INSTALLING Veil"
 	if [[ $os == "kali" ]] && [[ $osVersion == "2.0" ]]; then
@@ -378,6 +382,19 @@ installAdditionalSoftware(){
 		printGood "Cobalstrike folder exists, moving on."
 	else
 		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you."
+	fi
+
+	# Download/Install Inundator
+	echo; printStatus "INSTALLING Inundator"
+	if [[ ! `which inundator` ]]; then
+		printStatus "Inundator is not installed; installing now."
+		$inundatorDownload
+		apt-get -y install libnet-socks-perl
+		dpkg -i $localSoftwareDir/inundator_0.5_all.deb
+		commandStatus
+	elif [[ `which inundator` ]] && [[ ! -f $inundatorDownload ]]; then
+
+		printGood "Inundator is already installed, moving on."
 	fi
 }
 
@@ -1142,7 +1159,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "Initial" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit" "Static-IP" "Main-Menu"; do
+		select au in "Initial" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Static-IP" "Main-Menu"; do
 			case $au in
 				Initial )
 				echo; printStatus "Setting up a static IP."
@@ -1193,7 +1210,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				break
 				;;
 
-				Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit )
+				Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator )
 				downloadOfflineSoftwareRepo
 				installAdditionalSoftware
 				break
@@ -1625,6 +1642,7 @@ else
 			installAdditionalSoftware
 			echo; $sublime32Download
 			echo; $sublime64Download
+			echo; $inundatorDownload
 			rm -rf $localSoftwareDir/*.zip
 			echo; printStatus "Zip'ing and moving software to folder:  $localSoftwareDir"
 			while read p; do
