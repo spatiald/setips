@@ -27,7 +27,7 @@ trap 'exit 3' 1 2 3 15
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-version=2.1
+version=2.2
 setipsFolder="$HOME/setips-files"
 numberConfigLines="22"
 numberSoftwareLines="8"
