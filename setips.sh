@@ -30,7 +30,6 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 version=2.2
 setipsFolder="$HOME/setips-files"
 numberConfigLines="22"
-numberSoftwareLines="8"
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -52,9 +51,9 @@ redteamWikiUser="redteam" # Redteam wiki user
 redteamPathToUpdateSetips="linux/setips.sh" # Path on Redteam wiki to retrieve setips.sh script
 redteamPathToUpdateSetipsBeta="linux/setips-beta.sh" # Path on Redteam wiki to retrieve setips.sh beta script
 setipsUpdateFileDownloadLocation="$HOME/setips.sh" # Path to setips.sh script download location
-redteamPathToPullSnortRules="scripts/snort.rules" # Path on Redteam wiki to retrieve snort rules file
-snortRulesFile="snort.rules" # What we should call the downloaded snort rules file on local system
-snortRulesDirectory="$HOME/snort-rules" # Path to snort rules FOLDER on local system (not a file)
+redteamPathToPullSnortRules="scripts/community.rules" # Path on Redteam wiki to retrieve snort rules file
+snortRulesFile="community.rules" # What we should call the downloaded snort rules file on local system
+snortRulesDirectory="$localSoftwareDir/community-rules" # Path to snort rules FOLDER on local system (not a file)
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system
 EOF
 }
@@ -96,6 +95,7 @@ onlineVariables(){
 	sublime32Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_i386.deb -O $localSoftwareDir/sublime32.deb"
 	sublime64Download="wget -c http://c758482.r82.cf2.rackcdn.com/sublime-text_build-3083_amd64.deb -O $localSoftwareDir/sublime64.deb"
 	inundatorDownload="wget http://downloads.sourceforge.net/project/inundator/0.5/inundator_0.5_all.deb -O $localSoftwareDir/inundator_0.5_all.deb"
+	snortRulesDownload="wget -c https://www.snort.org/downloads/community/community-rules.tar.gz -O $localSoftwareDir/community-rules.tar.gz"
 }
 
 offlineVariables(){
@@ -108,6 +108,7 @@ offlineVariables(){
 	sublime32Download="$localSoftwareDir/sublime32.deb"
 	sublime64Download="$localSoftwareDir/sublime64.deb"
 	inundatorDownload="unzip -u $localSoftwareDir/inundator_0.5_all.deb.zip -d $localSoftwareDir"
+	snortRulesDownload=""
 }
 
 buildSoftwareList(){
@@ -120,6 +121,7 @@ veil
 empire
 powersploit
 inundator_0.5_all.deb
+community-rules
 EOF
 }
 
@@ -166,12 +168,14 @@ opMode(){
     opModeOnline(){
 		printGood "Script set for 'ONLINE' mode."
 		internet=1
+		setOnline
 		onlineVariables
 		checkInternet
     }
     opModeOffline(){
 		printGood "Script set for 'OFFLINE' mode."
 		internet=0
+		setOffline
 		offlineVariables
     }
     if [[ -z $internet ]]; then
@@ -232,6 +236,7 @@ checkInternet(){
 
 # Capture a users Ctrl-C
 ctrlC(){
+	stty sane
     echo; printError "Cancelled by user."
     echo; exit $?
 }
@@ -384,7 +389,11 @@ installAdditionalSoftware(){
 		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you."
 	fi
 
-	# Download/Install Inundator
+	downloadInundator
+}
+
+# Download/Install Inundator
+downloadInundator(){
 	echo; printStatus "INSTALLING Inundator"
 	if [[ ! `which inundator` ]]; then
 		printStatus "Inundator is not installed; installing now."
@@ -396,6 +405,13 @@ installAdditionalSoftware(){
 
 		printGood "Inundator is already installed, moving on."
 	fi
+
+	# Download Snort community rules
+	echo; printStatus "INSTALLING/UPDATING Snort Community Rules"
+	$snortRulesDownload
+	tar xvzf $localSoftwareDir/community-rules.tar.gz community-rules/community.rules -C $localSoftwareDir
+	rm -rf $snortRulesDirectory
+	mv community-rules $localSoftwareDir
 }
 
 # Setup Sublime Text
@@ -1152,6 +1168,24 @@ randomizePivotIP(){
 	$iptables -t filter -I FORWARD 1 -j ACCEPT
 }
 
+setOnline(){
+	sed -i 's/^internet="" #/internet="1" #/' $setipsFolder/setips.conf
+	sed -i 's/^internet="0" #/internet="1" #/' $setipsFolder/setips.conf
+	internet="1"
+}
+
+setOffline(){
+	sed -i 's/^internet="" #/internet="0" #/' $setipsFolder/setips.conf
+	sed -i 's/^internet="1" #/internet="0" #/' $setipsFolder/setips.conf
+	internet="0"
+}
+
+setAskEachTime(){
+	sed -i 's/^internet="0" #/internet="" #/' $setipsFolder/setips.conf
+	sed -i 's/^internet="1" #/internet="" #/' $setipsFolder/setips.conf
+	internet=""
+}
+
 # Start fully interactive mode (default when no options given or by adding "-i")
 interactiveMode(){
 echo; printError "Remember to remove your $ipsArchive file if you are starting a new exercise."; echo
@@ -1276,25 +1310,19 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				select om in "ONLINE" "OFFLINE" "ASK-EACH-TIME" "Main-Menu"; do
 					case $om in
 						ONLINE )
-						sed -i 's/^internet="" #/internet="1" #/' $setipsFolder/setips.conf
-						sed -i 's/^internet="0" #/internet="1" #/' $setipsFolder/setips.conf
-						internet="1"
+						setOnline
 						opMode
 						break
 						;;
 
 						OFFLINE )
-						sed -i 's/^internet="" #/internet="0" #/' $setipsFolder/setips.conf
-						sed -i 's/^internet="1" #/internet="0" #/' $setipsFolder/setips.conf
-						internet="0"
+						setOffline
 						opMode
 						break
 						;;
 
 						ASK-EACH-TIME )
-						sed -i 's/^internet="0" #/internet="" #/' $setipsFolder/setips.conf
-						sed -i 's/^internet="1" #/internet="" #/' $setipsFolder/setips.conf
-						internet=""
+						setAskEachTime
 						opMode
 						break
 						;;
@@ -1451,7 +1479,7 @@ chmod +x /etc/rc.local
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
-        print_error "Superuser (i.e. root) privileges are required to run this script."
+        printError "Superuser (i.e. root) privileges are required to run this script."
         exit 1
 fi
 
@@ -1703,7 +1731,12 @@ else
 			fi
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
-			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/snort-rules/
+			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/community-rules/
+
+			# Install inundator, if not available (Kali 2.0)
+			# Also, download/update Snort Community Rules
+			downloadInundator
+
 			if [[ $# -lt $((OPTIND)) ]]; then
 				echo "$IAM: Option -x argument(s) missing...needs 2!" >&2
 				echo; printHelp >&2
@@ -1713,30 +1746,39 @@ else
 			tgtIP=$OPTARG
 			eval threads=\$$OPTIND
 			# Start setup
-			echo; printError "You will need snort rules to run this script. If you want to download a copy, select 'n' to get them from the Redteam share"
-			while :; do
-				read -e -p "Do you already have them downloaded already (y/n)? " -r
-				if [[ $REPLY =~ ^[Nn]$ ]]; then
-					echo; printQuestion "What is the password to the network share?"; read -s redteamSharePassword
-					mkdir -p $snortRulesDirectory
-					# Downloading snort rulesets
-					snortRulesDownloadLink="wget --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/$redteamPathToPullSnortRules -O $snortRulesFileDownloadLocation"
-					$snortRulesDownloadLink >&2
-					if [[ -s $snortRulesFileDownloadLocation ]]; then
-						echo; printGood "Success! Downloaded rules to $snortRulesFileDownloadLocation"
+			if [[ ! -f $localSoftwareDir/community-rules/community.rules ]]; then
+				echo; printStatus "You will need snort rules to run this script. If you want to download a copy, select 'n' to get them from the Redteam share"
+				while :; do
+					read -e -p "Do you already have them downloaded already (y/n)? " -r
+					if [[ $REPLY =~ ^[Nn]$ ]]; then
+						echo; printQuestion "What is the password to the network share?"; read -s redteamSharePassword
+						mkdir -p $snortRulesDirectory
+						# Downloading snort rulesets
+						snortRulesDownloadLink="wget --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/$redteamPathToPullSnortRules -O $snortRulesFileDownloadLocation"
+						$snortRulesDownloadLink >&2
+						if [[ -s $snortRulesFileDownloadLocation ]]; then
+							echo; printGood "Success! Downloaded rules to $snortRulesFileDownloadLocation"
+						else
+							echo; printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
+							echo "$snortRulesDownloadLink"
+							exit 1
+						fi
+						break
+					elif [[ $REPLY =~ ^[Yy]$ ]]; then
+						echo; printQuestion "What is the path to your Snort rules *directory* (no trailing slash)? "; read snortRulesUserProvidedDirectory
+						snortRulesDirectory="$snortRulesUserProvidedDirectory"
+						break
 					else
-						echo; printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
-						echo "$snortRulesDownloadLink"
-						exit 1
+						echo; printError "You need to enter y (yes) or n (no)."
 					fi
-					break
-				elif [[ $REPLY =~ ^[Yy]$ ]]; then
-					echo; printQuestion "What is the path to your Snort rules *directory* (no trailing slash)? "; read snortRulesUserProvidedDirectory
-					snortRulesDirectory="$snortRulesUserProvidedDirectory"
-					break
-				fi
-			done
-			echo; printError "You need to use a proxy to increase your effects. Select 'n' to use a different server redirector IP:port"
+				done
+			fi
+			# Check config file for correct rules path
+			sed -i '/snort/d' 
+			echo 'snortRulesFile="'$snortRulesFile'" # What we should call the downloaded snort rules file on local system/' >> $setipsFolder/setips.conf
+			echo 'snortRulesDirectory="'$snortRulesDirectory'" # Path to snort rules FOLDER on local system (not a file)/' >> $setipsFolder/setips.conf
+			echo 'snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system' >> $setipsFolder/setips.conf
+			echo; printStatus "You need to use a proxy to increase your effects. Select 'n' to use a different server redirector IP:port"
 			read -e -p "Do you want to setup a proxy on your local box (y/n)? " -r
 			while :; do
 				if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -1745,17 +1787,10 @@ else
 					autoSetIPsOnStart >&2
 					cleanIPTables >&2
 					saveIPTables >&2
-					while :; do
-						echo; read -e -p "Enter 9050 when asked for your port...enter 'y' to confirm that you understand (y/n) " -r
-						if [[ $REPLY =~ ^[Yy]$ ]]; then
-							echo
-							setupSOCKS
-							break
-						elif [[ $REPLY =~ ^[Nn]$ ]]; then
-							exit 1
-						fi
-						proxy="localhost:9050"
-					done
+					echo; read -e -p "Enter 9050 when asked for your port...enter 'y' to confirm that you understand (y/n) " -r
+					echo
+					setupSOCKS
+					proxy="localhost:9050"
 					break
 				elif [[ $REPLY =~ ^[Nn]$ ]]; then
 					echo; printQuestion "What is the IP:Port of the external proxy (format as IP:Port)? "; read proxy
@@ -1771,6 +1806,8 @@ else
 					echo; read -e -p "ARE YOU SURE? (y/n) " -r
 					if [[ $REPLY =~ ^[Yy]$ ]]; then
 						echo; $inundator --thread $threads --proxy $proxy --rules $snortRulesDirectory --verbose $tgtIP
+						commandStatus
+						exit 1
 					elif [[ $REPLY =~ ^[Nn]$ ]]; then
 						exit 1
 					fi
