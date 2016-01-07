@@ -1,6 +1,13 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.2 (2016Jan07-1033)'
+- Formal release
+- Added Powershell Empire support
+- Updated setips support to Veil running on Kali 2.0
+- Add snort community rules for Inundator
+- Fixed inundator support on Kali 2.0
+
 Version: '2.0 (2015Nov24-1433)'
 - Updates galore...review the menus to see new options
 
