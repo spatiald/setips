@@ -1,6 +1,21 @@
 # setips Script
 
 ## Howto
+Download the latest version:  ```v2.2```
+
+[https://github.com/spatiald/setips/releases/latest](https://github.com/spatiald/setips/releases/latest)
+
+Run the following to make the script executable:
+```bash
+chmod +x setips.sh
+```
+Recommend running the script in interactive mode first to learn it's capabilities:
+```bash
+./setips.sh -i
+```
+Some commands are capable of running as running as oneliners from the command line.  See ```Usage``` and ```Examples``` below. 
+
+## Usage
 ```
 Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
        [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
