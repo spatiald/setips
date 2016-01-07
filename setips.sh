@@ -1471,6 +1471,8 @@ printHelp(){
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
 	echo
+	echo "For more detail, try running in interactive mode - ./setips.sh -i"
+	echo
 }
 
 #### MAIN PROGRAM ####
