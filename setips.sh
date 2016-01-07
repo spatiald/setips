@@ -1466,7 +1466,8 @@ done
 }
 
 printHelp(){
-	echo "setips.sh Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
+	echo "setips.sh"
+	echo "Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
 	echo
