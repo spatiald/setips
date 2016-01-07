@@ -3,7 +3,20 @@
 ## Howto
 Download the latest version:  ```v2.2```
 
-[https://github.com/spatiald/setips/releases/latest](https://github.com/spatiald/setips/releases/latest)
+Use git to clone the repository.  For Linux:
+```bash
+git clone https://github.com/spatiald/setips.git
+```
+
+If you need git installed, run:
+```bash
+apt-get update; apt-get -y install git
+```
+
+Once the ```setips``` folder downloads, you can update by changing into the setips directory and type:
+```bash
+git pull
+```
 
 Run the following to make the script executable:
 ```bash
