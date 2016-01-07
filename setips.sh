@@ -67,7 +67,7 @@ offlineServer(){
 	fi
 }
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
-osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
+osVersion=$(awk -F '=' '/VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
