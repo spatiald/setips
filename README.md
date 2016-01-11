@@ -1,8 +1,6 @@
 # setips Script
 
 ## Howto
-Download the latest version:  ```v2.2```
-
 Use git to clone the repository.  For Linux:
 ```bash
 git clone https://github.com/spatiald/setips.git
