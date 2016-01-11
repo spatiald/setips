@@ -67,7 +67,8 @@ offlineServer(){
 	fi
 }
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
-osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
+osVersion=$(awk -F '=' '/VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
+osFullVersion=$(awk -F '=' '/VERSION=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
@@ -160,7 +161,7 @@ osCheck(){
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
 	elif [[ "$os" == "ubuntu" ]]; then
 	  osVersion=$(awk -F '["=]' '/^VERSION_ID=/ {print $3}' /etc/os-release 2>&- | cut -d'.' -f1)
-	  printGood "Ubuntu ${osVersion} $(uname -m) Detected."
+	  printGood "Ubuntu ${osFullVersion} $(uname -m) Detected."
 	elif [[ "$os" == "debian" ]]; then
 	  printGood "Debian ${osVersion} $(uname -m) Detected."
 	fi
@@ -1111,6 +1112,8 @@ setupTeamserver(){
 # Install highly recommended tools
 installRecommendedTools(){
 	downloadError=0
+	echo; printStatus "Updating package repository."
+	apt-get update
 	echo; printStatus "Attempting to install:  unzip, fping, ipcalc, socat, libreadline5, screen"
 	apt-get -y install unzip fping ipcalc socat libreadline5 screen
 	commandStatus
@@ -1203,9 +1206,9 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 	case $ar in
 		Setup )
 		echo
-		select au in "Initial" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Static-IP" "Main-Menu"; do
+		select au in "Initial-Kali-Setup" "Setup-Redirector" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Static-IP" "Main-Menu"; do
 			case $au in
-				Initial )
+				Initial-Kali-Setup)
 				echo; printStatus "Setting up a static IP."
 				setupStaticIP
 				echo; printStatus "Install local system software repository and installing software."
@@ -1213,6 +1216,15 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				installAdditionalSoftware
 				installSublime
 				echo; printGood "Initial setup completed."
+				break
+				;;
+
+				Setup-Redirector )
+				echo; printStatus "Setting up a static IP."
+				setupStaticIP
+				echo; printStatus "Installing redirector tools/programs."
+				installRecommendedTools
+				echo; printGood "Redirector setup completed."
 				break
 				;;
 
@@ -1690,10 +1702,10 @@ else
 			while read p; do
 				# Check $HOME directory
 				cd $HOME
-				echo; zip $localSoftwareDir/$p.zip $p
+				echo; zip -r $localSoftwareDir/$p.zip $p
 				# Check $localSoftwareDir directory
 				cd $localSoftwareDir
-				echo; zip $localSoftwareDir/$p.zip $p
+				echo; zip -r $localSoftwareDir/$p.zip $p
 			done <$localSoftwareDir/software.lst
 			offlineSoftwareRepoStatus
 			echo; printGood "OFFLINE Software Repo setup --> $localSoftwareDir"
@@ -1708,10 +1720,14 @@ else
 			;;
 		(u) # UPDATE - Update setips.sh to the latest release build.
 			if [[ $internet == 1 ]]; then
-				wget https://github.com/spatiald/setips/raw/master/setips.sh -O setips.sh
+				rm -rf /root/setips
+				git clone https://github.com/spatiald/setips.git
+				cd /root/setips
+				git checkout master
 				commandStatus
-				chmod +x setips.sh
-				if [[ -f ./setips.sh ]]; then echo; printGood "setips.sh downloaded to your current folder."; fi
+				cp /root/setips/setips.sh /root/setips.sh
+				chmod +x /root/setips.sh
+				if [[ -f /root/setips.sh ]]; then echo; printGood "setips.sh downloaded to /root/setips.sh"; fi
 			else
 				echo; printStatus "You are currently in OFFLINE mode."
 				echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
@@ -1730,18 +1746,29 @@ else
 			fi
 			;;
 		(z) # UPDATE - Update setips.sh to the latest beta build.
-			echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
-			setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetipsBeta -O $setipsUpdateFileDownloadLocation.tmp"
-			$setipsDownloadLink >&2
-			if [[ -s $setipsUpdateFileDownloadLocation.tmp ]]; then
-				mv $setipsUpdateFileDownloadLocation $setipsFolder/setips.sh.last
-				mv $setipsUpdateFileDownloadLocation.tmp $setipsUpdateFileDownloadLocation
-				chmod +x $setipsUpdateFileDownloadLocation
-				printGood "Success! Downloaded update to /root/setips.sh"
+			if [[ $internet == 1 ]]; then
+				rm -rf /root/setips
+				git clone https://github.com/spatiald/setips.git
+				cd /root/setips
+				git checkout beta
+				commandStatus
+				cp /root/setips/setips.sh /root/setips.sh
+				chmod +x /root/setips.sh
+				if [[ -f /root/setips.sh ]]; then echo; printGood "setips.sh downloaded to /root/setips.sh"; fi
 			else
-				printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
-				echo "$setipsDownloadLink"
-				echo
+				echo; printQuestion "To download the latest version, I need to know the password to the Redteam wiki?"; read -s redteamWikiPassword
+				setipsDownloadLink="wget --http-user=$redteamWikiUser --http-password=$redteamWikiPassword $redteamWiki/$redteamPathToUpdateSetipsBeta -O $setipsUpdateFileDownloadLocation.tmp"
+				$setipsDownloadLink >&2
+				if [[ -s $setipsUpdateFileDownloadLocation.tmp ]]; then
+					mv $setipsUpdateFileDownloadLocation $setipsFolder/setips.sh.last
+					mv $setipsUpdateFileDownloadLocation.tmp $setipsUpdateFileDownloadLocation
+					chmod +x $setipsUpdateFileDownloadLocation
+					printGood "Success! Downloaded update to /root/setips.sh"
+				else
+					printStatus "Fail! Check the password you entered in the following command, fix if necessary, confirm your download and run this script again:"
+					echo "$setipsDownloadLink"
+					echo
+				fi
 			fi
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
