@@ -61,8 +61,10 @@ EOF
 ### DO NOT CHANGE the following
 offlineServer(){
 	if [[ $redteamShareAuth == 1 ]]; then
-		offlineDownloadServer="wget -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
+		# OwnCloud repo
+		offlineDownloadServer="wget --show-progress -c -nH -r --no-parent -e robots=off --reject "index.html*" --http-user=$redteamShareUser --http-password=$redteamSharePassword $redteamShare/remote.php/webdav/software"
 	else
+		# Generic web server
 		offlineDownloadServer="wget --show-progress -c -nH -r --no-parent -e robots=off --reject "index.html*" http://$redteamShare/software/"
 	fi
 }
@@ -1212,6 +1214,20 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				echo; printStatus "Setting up a static IP."
 				setupStaticIP
 				echo; printStatus "Install local system software repository and installing software."
+				findRedteamShare(){
+					echo; printQuestion "What is the IP/domain for the local server software repository?"; read redteamShare
+					sed -i 's/^redteamShare="" #/redteamShare="'$redteamShare'" #/' $setipsFolder/setips.conf
+				}
+				if [[ -z $redteamShare ]]; then
+					findRedteamShare
+				else
+					if [[ `which fping` ]]; then
+						$fping -c 1 $redteamShare || findRedteamShare
+					else
+						$ping -c 1 -w 0.5 $redteamShare || findRedteamShare
+					fi
+				fi
+				offlineServer
 				downloadOfflineSoftwareRepo
 				installAdditionalSoftware
 				installSublime
