@@ -4,7 +4,7 @@ NOTE: COPY/PASTE BOTH LINES into your CAP shell/console
 
 ```bash
 wget https://raw.githubusercontent.com/spatiald/setips/master/setips.sh \
--O /root/setips.sh; bash /root/setips.sh
+-O /root/setips.sh; chmod +x setips.sh; /root/setips.sh
 ```
 
 ## Howto
