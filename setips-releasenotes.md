@@ -1,27 +1,18 @@
 # setips.sh RELEASE NOTES
 
-## Download
-
-`NOTE:  To download setips.sh from the command line: 
-For the release verison, use the following from any linux system on red net:  
-```wget --http-user=user --http-password=ExercisePassword \```
-```http://wiki.rt/current-wiki/linux/setips.sh; chmod +x setips.sh```
-For the BETA verison, use the following from any linux system on red net:  
-```wget --http-user=user --http-password=ExercisePassword \```
-```http://wiki.rt/current-wiki/linux/setips-beta.sh -O setips.sh; chmod +x setips.sh```
-
 ## Current Version
-- Add Powershell Empire
-- Add community.rules download/update to -x option
-- Bug fixes for OFFLINE mode
+Version: '2.3 (2016Jan11-1118)'
+- Bug fixes in Snort community.rules download/update
 
-Version: '2.1 (2015Dec5-1109)'
-- Add Inundator to Kali 2.0
-- Added setips config file (setips.conf)
+Version: '2.2 (2016Jan07-1033)'
+- Formal release
+- Added Powershell Empire support
+- Updated setips support to Veil running on Kali 2.0
+- Add snort community rules for Inundator
+- Fixed inundator support on Kali 2.0
 
-Version: '2.0 (2015Dec2-1753)'
-- Added exercise "OFFLINE" mode
-- Added global log file (setips.log)
+Version: '2.0 (2015Nov24-1433)'
+- Updates galore...review the menus to see new options
 
 Version: '1.11 (2015Jun18-0002)'
 - Lots o' bug fixes
