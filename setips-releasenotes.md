@@ -1,6 +1,9 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.3 (2016Jan11-1118)'
+- Bug fixes in Snort community.rules download/update
+
 Version: '2.2 (2016Jan07-1033)'
 - Formal release
 - Added Powershell Empire support
