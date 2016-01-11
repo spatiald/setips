@@ -27,7 +27,7 @@ trap 'exit 3' 1 2 3 15
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-version=2.3
+version=BETA
 setipsFolder="$HOME/setips-files" # Main setips data folder
 numberConfigLines="22" # Number of lines in the createConfig function's created file below
 
