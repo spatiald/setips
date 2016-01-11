@@ -27,9 +27,9 @@ trap 'exit 3' 1 2 3 15
 
 # Setup some path variables
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-version=2.2
-setipsFolder="$HOME/setips-files"
-numberConfigLines="22"
+version=2.3
+setipsFolder="$HOME/setips-files" # Main setips data folder
+numberConfigLines="22" # Number of lines in the createConfig function's created file below
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -40,7 +40,7 @@ localSoftwareDir="$HOME/software" # Location where you want your downloaded soft
 cobaltstrikeDir="$HOME/cobaltstrike" # Cobaltstrike folder
 c2profilesDir="$HOME/c2profiles" # Cobaltstrike C2 Profiles folder
 veilDir="$HOME/veil" # Veil folder
-empireDir="$HOME/empire"
+empireDir="$HOME/empire" # Empire folder
 powersploitDir="$HOME/powersploit" # Powersploit folder
 redteamShareAuth="0" # "0"=No user auth, "1"=Use user auth
 redteamShare="" #e.g. 192.168.1.1 or share.com/remote.php/webdav/software
@@ -53,8 +53,8 @@ redteamPathToUpdateSetipsBeta="linux/setips-beta.sh" # Path on Redteam wiki to r
 setipsUpdateFileDownloadLocation="$HOME/setips.sh" # Path to setips.sh script download location
 redteamPathToPullSnortRules="scripts/community.rules" # Path on Redteam wiki to retrieve snort rules file
 snortRulesFile="community.rules" # What we should call the downloaded snort rules file on local system
-snortRulesDirectory="$localSoftwareDir/community-rules" # Path to snort rules FOLDER on local system (not a file)
-snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort rules file on local system
+snortRulesDirectory="$HOME/snort-rules" # Path to snort rules FOLDER on local system (not a file)
+snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort community-rules file on local system
 EOF
 }
 
@@ -67,7 +67,7 @@ offlineServer(){
 	fi
 }
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
-osVersion=$(awk -F '=' '/VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
+osVersion=$(awk -F '=' '/^VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=`date +"%Y%b%d-%H%M"`
 currentgw=`route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10`
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
@@ -121,7 +121,7 @@ veil
 empire
 powersploit
 inundator_0.5_all.deb
-community-rules
+snort-rules
 EOF
 }
 
@@ -146,13 +146,16 @@ testingScript(){
     set -x
     trap ctrlC INT
 
+	downloadOfflineSoftwareRepo
+	installAdditionalSoftware
+
     downloadError="0"
     exit 1
 }
 
 osCheck(){
 	if [[ -z "$os" ]] || [[ -z "$osVersion" ]]; then
-	  printError "Internal Issue. Couldn't Detect OS Information."
+	  printError "Internal issue. Couldn't detect OS information."
 	elif [[ "$os" == "kali" ]]; then
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
 	elif [[ "$os" == "ubuntu" ]]; then
@@ -409,9 +412,16 @@ downloadInundator(){
 	# Download Snort community rules
 	echo; printStatus "INSTALLING/UPDATING Snort Community Rules"
 	$snortRulesDownload
-	tar xvzf $localSoftwareDir/community-rules.tar.gz community-rules/community.rules -C $localSoftwareDir
-	rm -rf $snortRulesDirectory
-	mv community-rules $localSoftwareDir
+	mkdir -p $snortRulesDirectory
+	if [[ -f $localSoftwareDir/community-rules.tar.gz ]]; then
+		cd $snortRulesDirectory
+		tar xvzf $localSoftwareDir/community-rules.tar.gz community-rules/community.rules
+		mv $snortRulesDirectory/community-rules/community.rules $snortRulesDirectory/community.rules
+		rm -rf $snortRulesDirectory/community-rules
+		rm -f $localSoftwareDir/community-rules.tar.gz
+	elif [[ -f $localSoftwareDir/snort-rules.zip ]]; then
+		unzip $localSoftwareDir/snort-rules.zip -d $snortRulesDirectory/
+	fi
 }
 
 # Setup Sublime Text
@@ -1305,7 +1315,10 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 		select ut in "Change-Internet-OpMode" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "Display-IPTables" "Flush-IPTables" "Auto-set-IPTables-on-startup" "Remove-auto-set-IPTables-on-startup" "Auto-set-IPs-on-startup" "Remove-auto-set-IPs-on-startup" "Startup-SOCKS-Proxy" "Stop-All-SOCKS-Proxies" "Install-Recommended-Tools" "Create-Setips-Config" "Main-Menu"; do
 			case $ut in
 				Change-Internet-OpMode )
-				echo; printStatus "Persistantly changes this script's operational mode (can be changed at any time)."
+				echo; printStatus "Change Internet OpMode"
+				echo "----------------------"
+				echo "Persistantly changes this script's operational mode (can be changed at any time)."
+				opMode
 				echo; printQuestion "What OpMode would you like to use:"
 				select om in "ONLINE" "OFFLINE" "ASK-EACH-TIME" "Main-Menu"; do
 					case $om in
@@ -1466,12 +1479,9 @@ done
 }
 
 printHelp(){
-	echo "setips.sh"
-	echo "Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
+	echo "setips.sh Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "       [-u] [-x <victim IP> <# of threads>] [-z]"
-	echo
-	echo "For more detail, try running in interactive mode - ./setips.sh -i"
 	echo
 }
 
@@ -1667,13 +1677,14 @@ else
 			if [[ $internet != 1 ]]; then echo; printError "You must be online to run this command."; echo; break; fi
 			if [[ $os != "kali" ]]; then echo; printError "This setup must be run on Kali, exiting."; echo; break; fi
 			cd $localSoftwareDir
-			echo; printStatus "Installing software."
+			echo; printStatus "Install/update core programs."
 			installRecommendedTools
+			echo; printStatus "Downloading additional software."
 			downloadOfflineSoftwareRepo
 			installAdditionalSoftware
 			echo; $sublime32Download
 			echo; $sublime64Download
-			echo; $inundatorDownload
+#			echo; $inundatorDownload
 			rm -rf $localSoftwareDir/*.zip
 			echo; printStatus "Zip'ing and moving software to folder:  $localSoftwareDir"
 			while read p; do
@@ -1840,3 +1851,4 @@ else
 fi
 # Remove clear screen commands from log file <-- created by the Veil scripts
 sed -i '/=======/d' $setipsFolder/setips.log
+
