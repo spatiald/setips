@@ -392,7 +392,7 @@ installAdditionalSoftware(){
 	if [[ -f "$cobaltstrikeDir/teamserver" ]]; then
 		printGood "Cobalstrike folder exists, moving on."
 	else
-		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you."
+		printError "Cobalt Strike folder does not exist and my powers are not strong enough to download it for you in ONLINE mode."
 	fi
 
 	downloadInundator
@@ -423,7 +423,7 @@ downloadInundator(){
 		rm -rf $snortRulesDirectory/community-rules
 		rm -f $localSoftwareDir/community-rules.tar.gz
 	elif [[ -f $localSoftwareDir/snort-rules.zip ]]; then
-		unzip $localSoftwareDir/snort-rules.zip -d $snortRulesDirectory/
+		unzip $localSoftwareDir/snort-rules.zip -d $HOME
 	fi
 }
 
