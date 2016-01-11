@@ -3,8 +3,8 @@
 NOTE: COPY/PASTE BOTH LINES into your CAP shell/console
 
 ```bash
-wget https://raw.githubusercontent.com/rachelproject/rachelplus/master/cap-rachel-configure.sh \
--O /root/cap-rachel-configure.sh; bash /root/cap-rachel-configure.sh
+wget https://raw.githubusercontent.com/spatiald/setips/master/setips.sh \
+-O /root/setips.sh; bash /root/setips.sh
 ```
 
 ## Howto
