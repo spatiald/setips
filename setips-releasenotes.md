@@ -1,6 +1,9 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.4 (2016Jan11-1300)'
+- Fix the updater for master/beta versions
+
 Version: '2.3 (2016Jan11-1118)'
 - Bug fixes in Snort community.rules download/update
 
