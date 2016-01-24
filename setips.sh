@@ -1217,8 +1217,14 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 		select au in "Initial-Kali-Setup" "Setup-Redirector" "SSH-SOCKS-Proxy" "IPTables-SRC-NAT-Pivot" "Socat-Pivot" "Teamserver" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Static-IP" "Main-Menu"; do
 			case $au in
 				Initial-Kali-Setup)
-				echo; printStatus "Setting up a static IP."
-				setupStaticIP
+				echo; printQuestion "Do you want to setup a static IP (select 'N' to leave it DHCP)?"
+				read -p "    Enter (y/N) " REPLY
+				if [[ $REPLY =~ ^[Yy]$ ]];
+					echo; printStatus "Setting up a static IP."
+					setupStaticIP
+				else
+					echo; printStatus "Keeping the IP as DHCP; if needed, you can set a static IP later via this script."
+				fi
 				echo; printStatus "Install local system software repository and installing software."
 				findRedteamShare(){
 					echo; printQuestion "What is the IP/domain for the local server software repository?"; read redteamShare
