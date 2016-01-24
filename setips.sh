@@ -1219,7 +1219,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "Export" "Quit"; do
 				Initial-Kali-Setup)
 				echo; printQuestion "Do you want to setup a static IP (select 'N' to leave it DHCP)?"
 				read -p "    Enter (y/N) " REPLY
-				if [[ $REPLY =~ ^[Yy]$ ]];
+				if [[ $REPLY =~ ^[Yy]$ ]]; then
 					echo; printStatus "Setting up a static IP."
 					setupStaticIP
 				else
