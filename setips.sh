@@ -310,6 +310,12 @@ downloadOfflineSoftwareRepo(){
 
 installAdditionalSoftware(){
 	downloadError=0
+	echo; printGood "Internet status:  $internet"
+	if [[ $internet == 1 ]]; then
+		# Updating repos
+		apt-get update
+	fi
+
 	# Download Veil
 	echo; printStatus "INSTALLING Veil"
 	if [[ $os == "kali" ]] && [[ $osVersion == "2.0" ]]; then
