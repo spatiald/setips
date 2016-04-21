@@ -1,6 +1,18 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.7 (2016Apr20-1343)'
+- Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
+- /etc/rc.local wasn't modified correctly to be executable
+- networkLevel check refined; off doesn't prompt for networkLevel
+- Added support to remotely setup redirectors; under Setup menu
+- Added option to add more redirector ips to current box
+- Changed menu option "Export" to "View-Info" to more accurately reflect its purpose (and because Don and John couldn't figure out what it was doing)
+- Updated 
+
+Version: '2.6 (2016Feb15-1435)'
+- Updated setips
+
 Version: '2.4 (2016Jan11-1300)'
 - Fix the updater for master/beta versions
 
