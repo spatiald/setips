@@ -91,6 +91,14 @@ Inundator - Setup subinterfaces (if necessary), run inudator to blind snort sens
 ./setips.sh -x <target-IP> <#-of-threads>
 ```
 
+## Troubleshooting
+
+### Cloning error - "error: server certificate verification failed."
+Add the following to your "git clone" command
+```
+-c http.sslVerify=false
+```
+
 ## License
 Setips by spatiald is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/legalcode).
 
