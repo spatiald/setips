@@ -25,11 +25,12 @@
 stty sane
 
 #in case you wish to kill it
-trap 'exit 3' 1 2 3 15
+#trap 'exit 3' 1 2 3 15
+trap cleanup EXIT
 
 # Setup some path variables (CHANGE THESE, IF NEEDED)
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-version=2.7
+version=2.7a
 setipsFolder="$HOME/setips-files" # Main setips data folder
 configFile="$setipsFolder/setips.conf"
 defaultMTU=1500 # Normal is 1500; exercises are typically 1280 or 900
@@ -165,12 +166,22 @@ printQuestion(){
 # Test function
 testingScript(){
     set -x
-    trap ctrlC INT
 
-        setupAnotherRedirector
+    setupAnotherRedirector
 
     downloadError="0"
     exit 1
+}
+
+cleanup(){
+    #kill $!; trap 'kill $1' SIGTERM
+    
+    # Remove clear screen commands from log file <-- created by the Veil scripts
+    sed -i '/=======/d' $setipsFolder/setips.log
+    # Check /etc/rc.local for the execute bit
+    chmod +x /etc/rc.local
+    stty sane
+    echo; exit $?
 }
 
 osCheck(){
@@ -187,7 +198,6 @@ osCheck(){
 }
 
 opMode(){
-	trap ctrlC INT
 	opModeOnline(){
 		printGood "Script set for 'ONLINE' mode."
 		internet=1
@@ -229,7 +239,6 @@ opMode(){
 
 # Check internet connectivity
 checkInternet(){
-        trap ctrlC INT
         echo; printStatus "Checking internet connectivity..."
     if [[ $internet == "1" || -z $internet ]]; then
         # Check internet connecivity
@@ -1253,8 +1262,6 @@ setupSocatPivot(){
 
 # Setup Cobaltstrike Teamserver
 setupTeamserver(){
-        trap ctrlC INT
-
         # Check for installed software
         installAdditionalSoftware
 
@@ -2099,7 +2106,3 @@ else
                 fi
         done
 fi
-# Remove clear screen commands from log file <-- created by the Veil scripts
-sed -i '/=======/d' $setipsFolder/setips.log
-# Check /etc/rc.local for the execute bit
-chmod +x /etc/rc.local
