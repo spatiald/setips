@@ -21,10 +21,7 @@
 # - powersploit.zip
 # - veil.zip
 
-version=2.7b
-
-stty sane # Fix backspace
-trap cleanup EXIT # Cleanup if script exits for any reason
+scriptVersion=2.7b
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1300 # IO Range requires 1300, normal networks are 1500
@@ -79,6 +76,15 @@ snortRulesFile="community.rules" # What we should call the downloaded snort rule
 snortRulesPath="$HOME"
 snortRulesDirectory="$snortRulesPath/snort-rules" # Path to snort rules FOLDER on local system (not a file)
 snortRulesFileDownloadLocation="$snortRulesDirectory/$snortRulesFile" # Full path to snort community-rules file on local system
+
+# Print version only, if requested
+if [[ $1 == "--version" ]]; then
+    echo $scriptVersion
+    exit 0
+fi
+
+stty sane # Fix backspace
+trap cleanup EXIT # Cleanup if script exits for any reason
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -1755,7 +1761,7 @@ fi
 exec &> >(tee "$setipsFolder/setips.log")
 
 # Starting core script
-echo; echo "Setips Script - Version $version"
+echo; echo "Setips Script - Version $scriptVersion"
 printGood "Started:  $(date)"
 printGood "Configuration and logging directory:  $setipsFolder"
 
