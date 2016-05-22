@@ -21,7 +21,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.7b
+scriptVersion=2.7c
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1300 # IO Range requires 1300, normal networks are 1500
@@ -111,6 +111,7 @@ offlineSetipsServer(){
 	fi
 }
 os="$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release 2>&-)"
+osIssue="$(cat /etc/issue|awk -F '\' '{ print $1 }')"
 osVersion=$(awk -F '=' '/VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 osFullVersion=$(awk -F '=' '/VERSION=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=$(date +"%Y%b%d-%H%M")
@@ -198,8 +199,7 @@ testingScript(){
 }
 
 cleanup(){
-    #kill $!; trap 'kill $1' SIGTERM
-    
+    kill $!; trap 'kill $1' SIGTERM
     # Remove clear screen commands from log file <-- created by the Veil scripts
     sed -i '/=======/d' $setipsFolder/setips.log
     # Check /etc/rc.local for the execute bit
@@ -209,7 +209,7 @@ cleanup(){
 }
 
 osCheck(){
-	if [[ -z "$os" ]] || [[ -z "$osVersion" ]]; then
+	if [[ -z "$os" ]] || [[ -z "$osVersion" ]] || [[ -z "$osIssue" ]]; then
 	  printError "Internal issue. Couldn't detect OS information."
 	elif [[ "$os" == "kali" ]]; then
 	  printGood "Kali Linux ${osVersion} $(uname -m) Detected."
@@ -218,6 +218,8 @@ osCheck(){
 	  printGood "Ubuntu ${osFullVersion} $(uname -m) Detected."
 	elif [[ "$os" == "debian" ]]; then
 	  printGood "Debian ${osVersion} $(uname -m) Detected."
+	else
+	  printGood "$(echo $osIssue)"
 	fi
 }
 
@@ -618,41 +620,44 @@ offlineSoftwareRepoStatus(){
 # Find the IP addresses in use
 listIPs(){
 	echo; printStatus "Ethernet interfaces that have assigned addresses:"
-	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d"
+	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/addr//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d"
+}
+
+listCoreIntsIPsubInt(){
+	echo; printStatus "Current core interface assignments:"
+	currentCoreIP=$($ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f2 | cut -d" " -f1)
+	currentCoreNetmask=$(ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f4)	
+	echo "$ethInt $currentCoreIP $currentCoreNetmask"
 }
 
 # Find the core IP address in use
 listCoreInterfaces(){
 	echo; printStatus "Core IP addresses on this system:"
 	#$ifconfig | head -n2 | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }'
-	$ifconfig | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | grep -v eth'[0-9]': | head -n -1
+#	$ifconfig | awk '{ if ( $1 == "inet" ) { print $2, $4 } else if ( $2 == "Link" ) { printf "%s " ,$1 } }' | grep -v eth'[0-9]': | head -n -1
+	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/addr//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d" | sed "/:/d"
 }
 
 # Show only the core IP address
 listCoreIPAddr(){
-	$ifconfig $ethInt |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $2 }' | head -n 1 2>&1
+	$ifconfig $ethInt |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/addr//g' | awk -F:: '{ print $2 }' | head -n 1 2>&1
 }
 
 # List the interfaces without addresses assigned
 listInts(){
 	echo; printStatus "Ethernet interfaces:"
-	$ifconfig -a |grep "eth" | awk '{ print $1 " " }' | sed "/lo/d" | sed "/:/d"
+#	$ifconfig -a |grep "eth" | awk '{ print $1 " " }' | sed "/lo/d" | sed "/:/d"
+	netstat -i | sed "/MTU/d" | sed "/Kernel/d" | sed "/lo/d" | sed "/:/d" | awk '{ print $1 }'
 }
 
 # Ask which ethernet port you want to create subinterfaces for
 whatInterface(){
-	#if [[ ! -z ${ethInt:+x} ]]; then
-	listCoreInterfaces
-	#       listInts
-	while :; do
-		echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0, eth1...)?"; read ethInt
-		if [[ "$ethInt" =~ ^[A-Za-z]{3}+[0-9]{1}$ ]]; then
-			break
-		else
-			echo; printError "Please enter the root ethernet interface (for example, enter eth0 not eth0:1)"
-		fi
-	done
-	#fi
+	ethIntList=$(netstat -i | sed "/MTU/d" | sed "/Kernel/d" | sed "/lo/d" | sed "/:/d" | awk '{ print $1 }')
+	echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0, eth1...)?"
+    select int in $ethIntList; do 
+    	ethInt=$int
+        break
+    done
 }
 
 # List IPs, single line, comma-seperated
@@ -676,11 +681,11 @@ whatMTU(){
 	if [[ -f $setipsFolder/mtu.current ]]; then
 		echo; printStatus "Your current mtu is:  $(cat $setipsFolder/mtu.current)";
 		mtu=$(cat $setipsFolder/mtu.current)
-		echo; printQuestion "Do you want to change your mtu? (y/N)"; read REPLY
+		printQuestion "Do you want to change your mtu? (y/N)"; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			echo; echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
+			echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
 		else
-			echo; printError "MTU not changed."
+			printError "MTU not changed."
 		fi
 	else
 		echo; printQuestion "What is your desired MTU setting (current default is $defaultMTU)?"; read mtu || return
@@ -712,7 +717,8 @@ addSubInts(){
 	{ rm /tmp/ips.txt; touch /tmp/ips.txt; } > /dev/null 2>&1
 	# MTU
 	whatMTU
-
+	# Show Int, IP, Subnet
+	listCoreIntsIPsubInt
 	# SUBNET
 	echo; printQuestion "What subnet class are you creating IPs for?"
 	select class in "A" "B" "C"; do
@@ -809,14 +815,14 @@ addSubInts(){
 checkForSubinterfaces(){
 	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
 	if [[ ! -s /tmp/sub.txt ]]; then
-		echo; printQuestion "No subinterfaces exist...would you like to create some? (y/n) "; read REPLY
+		echo; printQuestion "No subinterfaces exist...would you like to create some? (y/N) "; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			addSubInts
 		fi
 	else
 		echo; printStatus "Current subinterfaces:"
-		ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d" | tail -n +2
-		echo; printQuestion "Do you want to change your current subinterface IPs? (y/n) "; read REPLY
+		ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/addr//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d" | tail -n +2
+		echo; printQuestion "Do you want to change your current subinterface IPs? (y/N) "; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			removeSubInts
 			addSubInts
@@ -1071,13 +1077,12 @@ setupSOCKS(){
 	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print "socks4 " $NF }' | awk '{ print $0 "'" $proxyport"'"}' | head -n -1
 
 	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in the /etc/rc.local file)
-	echo; printQuestion "Would you like the SOCKS proxy to start on reboot? (y/n)"; read REPLY
+	echo; printQuestion "Would you like the SOCKS proxy to start on reboot? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		autoStartSOCKSProxy
 	else
-		rm -rf /tmp/ssh.tmp;
+		rm -f /tmp/ssh.tmp
 	fi
-	echo
 }
 
 # Stop SOCKS proxy
@@ -1543,6 +1548,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 
 				Restore-Subinterfaces )
+				listCoreIntsIPsubInt
 				whatInterface
 				removeSubInts
 				restoreSubIntsFile
@@ -2086,12 +2092,12 @@ else
 					autoSetIPsOnStart >&2
 					cleanIPTables >&2
 					saveIPTables >&2
-				while :; do
-						echo; printQuestion "Enter 9050 when asked for your port...enter 'y' to confirm that you understand (y/n) "; read REPLY
-					if [[ $REPLY =~ ^[Yy]$ ]]; then
-				break
-			fi
-			done
+					while :; do
+						echo; printQuestion "Enter 9050 when asked for your port...enter 'y' to confirm that you understand (y/N) "; read REPLY
+						if [[ $REPLY =~ ^[Yy]$ ]]; then
+							break
+						fi
+					done
 					echo
 					setupSOCKS
 					proxy="localhost:9050"
