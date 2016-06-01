@@ -21,7 +21,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.7c
+scriptVersion=2.7d
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1300 # IO Range requires 1300, normal networks are 1500
@@ -652,7 +652,7 @@ listInts(){
 
 # Ask which ethernet port you want to create subinterfaces for
 whatInterface(){
-	ethIntList=$(netstat -i | sed "/MTU/d" | sed "/Kernel/d" | sed "/lo/d" | sed "/:/d" | awk '{ print $1 }')
+	ethIntList=$($ipconfig -a | grep "Link encap" | grep -v "lo" | awk '{ print $1 }')
 	echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0, eth1...)?"
     select int in $ethIntList; do 
     	ethInt=$int
@@ -696,6 +696,91 @@ whatMTU(){
 	fi
 	# Add MTU to backup file
 	echo $mtu > $setipsFolder/mtu.current
+}
+
+# Add dual gateways
+dualGateways(){
+	echo; printStatus "Dual Gateway Setup"
+	echo; echo "Enter network info using the following example:"
+	echo "<ip> <cidr> <network-address> <gateway-ip>"
+	echo "192.168.100.5 24 192.168.100.0 192.168.100.1"
+	while :; do
+		echo; printQuestion "What is Network 1's info:"; read network1
+		if [[ "$network1" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})[[:blank:]]([0-9]{,2})[[:blank:]]([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})[[:blank:]]([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+			break
+		else
+			echo; printError "You entered the required information incorrectly."
+			echo "Please enter Network 1's info again with space separation (for example, enter <ip> <cidr> <network-address> <gateway-ip)"
+		fi
+	done
+	while :; do
+		echo; printQuestion "What is Network 2's info:"; read network2
+		if [[ "$network2" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})[[:blank:]]([0-9]{,2})[[:blank:]]([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})[[:blank:]]([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+			break
+		else
+			echo; printError "You entered the required information incorrectly."
+			echo "Please enter Network 2's info again with space separation (for example, enter <ip> <cidr> <network-address> <gateway-ip)"
+		fi
+	done
+	listCoreInterfaces
+	echo; printQuestion "What is Network1's ethernet interface (choose a root interface, ie eth0, eth1...)?"; read network1EthInt
+	ethIntList=$($ipconfig -a | grep "Link encap" | grep -v "lo" | awk '{ print $1 }')
+	echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0, eth1...)?"
+	select int in $ethIntList; do 
+		network1EthInt=$int
+	    break
+	done
+	echo; printQuestion "What is Network2's ethernet interface (choose a root interface, ie eth0, eth1...)?"; read network2EthInt
+	ethIntList=$($ipconfig -a | grep "Link encap" | grep -v "lo" | awk '{ print $1 }')
+	echo; printQuestion "What ethernet interface do you want to work with (choose a root interface, ie eth0, eth1...)?"
+	select int in $ethIntList; do 
+		network2EthInt=$int
+	    break
+	done
+
+	network1IP="$(echo $network1 | awk -F" " '{ print $1 }')"
+	network1CIDR="$(echo $network1 | awk -F" " '{ print $2 }')"
+	network1Network="$(echo $network1 | awk -F" " '{ print $3 }')"
+	network1Gateway="$(echo $network1 | awk -F" " '{ print $4 }')"
+	network2IP="$(echo $network2 | awk -F" " '{ print $1 }')"
+	network2CIDR="$(echo $network2 | awk -F" " '{ print $2 }')"
+	network2Network="$(echo $network2 | awk -F" " '{ print $3 }')"
+	network2Gateway="$(echo $network2 | awk -F" " '{ print $4 }')"
+
+	echo; printStatus "Using the following information to setup dual gateways:"
+	echo "Network1 IP:  $network1IP"
+	echo "Network1 CIDR:  $network1CIDR"
+	echo "Network1 Network:  $network1Network"
+	echo "Network1 Gateway:  $network1Gateway"
+	echo "- - - - -"
+	echo "Network2 IP:  $network2IP"
+	echo "Network2 CIDR:  $network2CIDR"
+	echo "Network2 Network:  $network2Network"
+	echo "Network2 Gateway:  $network2Gateway"
+
+	echo; printQuestion "Are you ready to continue? (y/N) "; read REPLY
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		echo; printStatus "Setting up networks..."
+
+		echo "1 network1" >> /etc/iproute2/rt_tables
+		echo "2 network2" >> /etc/iproute2/rt_tables
+
+		ifconfig eth0 $network1IP/$network1CIDR
+		ifconfig eth1 $network2IP/$network2CIDR
+
+		ip route add $network1Network/$network1CIDR dev eth0 table network1
+		ip route add $network2Network/$network2CIDR dev eth1 table network2
+
+		ip route add default via $network1Gateway dev eth0 table network1
+		ip route add default via $network2Gateway dev eth1 table network2
+
+		ip rule add from $network1IP/32 table network1
+		ip rule add from $network2IP/32 table network2
+
+		echo; printGood "Done."
+	else
+		echo; printError "User requested to exit dual gateway setup."
+	fi
 }
 
 # Remove all subinterfaces
@@ -964,6 +1049,7 @@ setupStaticIP(){
 		echo; printQuestion "What IP do you want to set?"; read ip
 		echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)?"; read subnet
 		# Configure address on interface
+		$ifconfig $ethInt up
 		$ifconfig $ethInt $ip/$subnet mtu $mtu
 		# Add subnet to backup file
 		echo $subnet > $setipsFolder/subnet.current
@@ -1423,9 +1509,10 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 		echo "[Socat-Pivot] sets up socat listener that redirects to target IP/Port"
 		echo "[SublimeText] installs SublimeText"
 		echo "[Cobaltstrike...] installs the programs listed"
+		echo "[Dual-Gateways] setps up a dual-homed system"
 		echo "[Static-IP] persistent static IP"
 		echo
-		select au in "Initial-Kali" "Initial-Redirector" "Initial-Teamserver" "Remote-Redirector" "Addtl-Redir-Pivot-IPs" "SSH-SOCKS-Proxy" "IPTables-Pivot-IPs" "Socat-Pivot" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Static-IP" "Main-Menu"; do
+		select au in "Initial-Kali" "Initial-Redirector" "Initial-Teamserver" "Remote-Redirector" "Addtl-Redir-Pivot-IPs" "SSH-SOCKS-Proxy" "IPTables-Pivot-IPs" "Socat-Pivot" "SublimeText" "Cobaltstrike-C2Profiles-Veil-PowershellEmpire-Powersploit-Inundator" "Dual-Gateways" "Static-IP" "Main-Menu"; do
 			case $au in
 				Initial-Kali)
 				echo; printStatus "Setting up a static IP."
@@ -1510,6 +1597,11 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				downloadOfflineSoftwareRepo
 				installAdditionalSoftware
 				downloadSnortRules
+				break
+				;;
+
+				Dual-Gateways )
+				dualGateways
 				break
 				;;
 
