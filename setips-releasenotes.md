@@ -8,7 +8,8 @@ Version: '2.7 (2016Apr20-1343)'
 - Added support to remotely setup redirectors; under Setup menu
 - Added option to add more redirector ips to current box
 - Changed menu option "Export" to "View-Info" to more accurately reflect its purpose (and because Don and John couldn't figure out what it was doing)
-- Updated 
+- Added dual gateway support (v2.7d)
+- Fix interface identification; caused issues with various functions (v2.7e)
 
 Version: '2.6 (2016Feb15-1435)'
 - Updated setips
