@@ -1,7 +1,7 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
-Version: '2.7 (2016Jun28-1631)'
+Version: '2.7 (2017Feb15-2147)'
 - Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
 - /etc/rc.local wasn't modified correctly to be executable
 - networkLevel check refined; off doesn't prompt for networkLevel
