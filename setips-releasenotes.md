@@ -1,7 +1,7 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
-Version: '2.7 (2016Apr20-1343)'
+Version: '2.7 (2016Jun28-1631)'
 - Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
 - /etc/rc.local wasn't modified correctly to be executable
 - networkLevel check refined; off doesn't prompt for networkLevel
@@ -10,6 +10,11 @@ Version: '2.7 (2016Apr20-1343)'
 - Changed menu option "Export" to "View-Info" to more accurately reflect its purpose (and because Don and John couldn't figure out what it was doing)
 - Added dual gateway support (v2.7d)
 - Fix interface identification; caused issues with various functions (v2.7e)
+- Changed ipconfig to ifconfig (oops); reworked setupStaticIP function (v2.7f)
+- Poor attempts to fix what the "in-game" Kali broke in networking output (v2.7g-v2.7i)
+- MASSIVE update to support both "normal" and "in-game" Kali instances that are dumb (v2.7j)
+- Collect static IP info prior to changing /etc/network/interfaces (v2.7k)
+- Error checking on add sub ints; fixed remove sub ints fail; cleaned up tabs vs spaces (v2.7l)
 
 Version: '2.6 (2016Feb15-1435)'
 - Updated setips
