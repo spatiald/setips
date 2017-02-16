@@ -2339,7 +2339,7 @@ else
 			fi
 			;;
 		(x) # INUNDATOR - Setup subinterfaces (if necessary), run inudator to replay snort rules that "inundates" snort sensors by sending all the default snort rules across their sensors
-			# inundator 76.161.37.18 --verbose --thread 10 --proxy 37.75.5.41:1080 --rules /root/community-rules/
+			# inundator <TGT-IP> --verbose --thread 10 --proxy <PROXY-IP>:1080 --rules /root/community-rules/
 
 			# Install inundator, if not available (Kali 2.0)
 			# Also, download/update Snort Community Rules
