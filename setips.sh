@@ -26,7 +26,7 @@ scriptVersion=2.7l
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
-_internet="0" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
+_internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 _networkLevel="Off" # "Off", "Low", or "High"; if set "Off", script will not prompt and use "Low" for settings
 ## Redteam Share IP info and user
 _redteamShareAuth="1" # "0"=No user auth, "1"=Use user auth
