@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.7l
+scriptVersion=2.8
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -541,7 +541,7 @@ downloadSnortRules(){
 			printError "Ah...your rules folder is empty! Downloading community-rules."
 			downloadSnortZip
 		else
-			echo; printGood "I found your snort-rules directory...let's rock!"
+			echo; printGood "I found your snort-rules directory...let's rockecho 
 		fi
 	fi
 }

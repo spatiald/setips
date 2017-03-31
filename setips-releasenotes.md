@@ -1,6 +1,9 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.8 (2017Mar30-2112)'
+- Set default opMode to "ask"; ready for next event
+
 Version: '2.7 (2017Feb15-2147)'
 - Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
 - /etc/rc.local wasn't modified correctly to be executable
