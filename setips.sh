@@ -541,7 +541,7 @@ downloadSnortRules(){
 			printError "Ah...your rules folder is empty! Downloading community-rules."
 			downloadSnortZip
 		else
-			echo; printGood "I found your snort-rules directory...let's rockecho 
+			echo; printGood "I found your snort-rules directory...let's rock!"
 		fi
 	fi
 }
