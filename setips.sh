@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.8
+scriptVersion=2.8a
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -1157,61 +1157,66 @@ autoStartSOCKSProxy(){
 }
 
 setupStaticIP(){
+	configureStaticIP(){
+		configureStaticIP=1
+		listCoreInterfaces
+		while [[ $configureStaticIP == 1 ]]; do
+			whatMTU
+			echo; printQuestion "What IP do you want to set?"; read ip
+			echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)?"; read subnet
+			# Configure address on interface
+			$ifconfig $ethInt up
+			$ifconfig $ethInt $ip/$subnet mtu $mtu
+			# Add subnet to backup file
+			echo $subnet > $setipsFolder/subnet.current
+			echo; printGood "Your $ethInt interface is setup:"
+			echo; $ifconfig $ethInt
+			if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
+				echo; printQuestion "Do you want to setup a default gateway and DNS? (y/N)"; read REPLY
+				if [[ $REPLY =~ ^[Yy]$ ]]; then
+					setGateway
+					setDNS
+				fi
+			fi
+			# Configure /etc/network/interfaces file
+			if [[ ! $(cat /etc/network/interfaces|grep setips.sh) ]]; then
+				echo "# This config was auto-generated using the setips.sh script" > /etc/network/interfaces
+				echo "auto lo" >> /etc/network/interfaces
+				echo "iface lo inet loopback" >> /etc/network/interfaces
+			fi
+			sed -i '/'$ethInt' START/,/'$ethInt' STOP/d' /etc/network/interfaces
+			echo "# $ethInt START" >> /etc/network/interfaces
+			echo "auto $ethInt" >> /etc/network/interfaces
+			echo "iface $ethInt inet static" >> /etc/network/interfaces
+			echo "address $ip" >> /etc/network/interfaces
+			netmask=$($ifconfig $ethInt | grep "inet" | head -n 1 | awk '{ print $4 }' | cut -d":" -f2)
+			echo "netmask $netmask" >> /etc/network/interfaces
+			if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
+				gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
+				if [[ $gatewayip ]]; then echo "gateway $gatewayip" >> /etc/network/interfaces; fi
+				dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
+				if [[ $dns ]]; then echo "dns-nameservers $dns" >> /etc/network/interfaces; fi
+			fi
+			echo "mtu $mtu" >> /etc/network/interfaces
+			echo "# $ethInt STOP" >> /etc/network/interfaces
+			echo; printQuestion "Do you want to setup another CORE interface with a static IP? (y/N)"; read REPLY
+			if [[ $REPLY =~ ^[Yy]$ ]]; then
+				configureStaticIP=1
+				listCoreInterfaces
+				whatInterface
+			else
+				configureStaticIP=0
+			fi
+			echo
+		done
+	}
 	if [[ $(cat /etc/network/interfaces|grep setips.sh) ]] && [[ $(cat /etc/network/interfaces|grep "# $ethInt START") ]]; then
 		echo; printQuestion "You have already setup a static IP with this script; do you want to continue? (y/N)"; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			configureStaticIP=1
-			listCoreInterfaces
-			while [[ $configureStaticIP == 1 ]]; do
-				whatMTU
-				echo; printQuestion "What IP do you want to set?"; read ip
-				echo; printQuestion "What is the CIDR of the subnet you are on (ie 16 for 255.255.0.0)?"; read subnet
-				# Configure address on interface
-				$ifconfig $ethInt up
-				$ifconfig $ethInt $ip/$subnet mtu $mtu
-				# Add subnet to backup file
-				echo $subnet > $setipsFolder/subnet.current
-				echo; printGood "Your $ethInt interface is setup:"
-				echo; $ifconfig $ethInt
-				if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
-					echo; printQuestion "Do you want to setup a default gateway and DNS? (y/N)"; read REPLY
-					if [[ $REPLY =~ ^[Yy]$ ]]; then
-						setGateway
-						setDNS
-					fi
-				fi
-				# Configure /etc/network/interfaces file
-				if [[ ! $(cat /etc/network/interfaces|grep setips.sh) ]]; then
-					echo "# This config was auto-generated using the setips.sh script" > /etc/network/interfaces
-					echo "auto lo" >> /etc/network/interfaces
-					echo "iface lo inet loopback" >> /etc/network/interfaces
-				fi
-				sed -i '/'$ethInt' START/,/'$ethInt' STOP/d' /etc/network/interfaces
-				echo "# $ethInt START" >> /etc/network/interfaces
-				echo "auto $ethInt" >> /etc/network/interfaces
-				echo "iface $ethInt inet static" >> /etc/network/interfaces
-				echo "address $ip" >> /etc/network/interfaces
-				netmask=$($ifconfig $ethInt | grep "inet" | head -n 1 | awk '{ print $4 }' | cut -d":" -f2)
-				echo "netmask $netmask" >> /etc/network/interfaces
-				if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
-					gatewayip=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-					if [[ $gatewayip ]]; then echo "gateway $gatewayip" >> /etc/network/interfaces; fi
-					dns=`cat /etc/resolv.conf | grep nameserver | awk '{ print $2}' | awk '{printf "%s ",$0} END {print ""}'`
-					if [[ $dns ]]; then echo "dns-nameservers $dns" >> /etc/network/interfaces; fi
-				fi
-				echo "mtu $mtu" >> /etc/network/interfaces
-				echo "# $ethInt STOP" >> /etc/network/interfaces
-				echo; printQuestion "Do you want to setup another CORE interface with a static IP? (y/N)"; read REPLY
-				if [[ $REPLY =~ ^[Yy]$ ]]; then
-					configureStaticIP=1
-					listCoreInterfaces
-					whatInterface
-				else
-					configureStaticIP=0
-				fi
-				echo
-			done
+			configureStaticIP
 		fi
+	else
+		configureStaticIP
 	fi
 }
 
@@ -1595,6 +1600,79 @@ installRecommendedTools(){
 	fi
 }
 
+# Install redirector tools
+installRedirTools(){
+	downloadError=0
+	echo; printStatus "Updating package repository."
+	apt-get update
+	apt-get autoremove
+	echo; printStatus "Attempting to install:  unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php"
+	apt-get -y install unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php7.0
+	commandStatus
+	systemctl stop apache2
+	systemctl stop vsftpd
+	update-rc.d apache2 disable
+	update-rc.d vsftpd disable
+	# Add vsftpd config files
+	mkdir /var/ftp/upload
+	chown ftp:ftp /var/ftp/upload
+	mkdir /etc/vsftpd
+	cat > /etc/vsftpd/vsftpd-anon.conf << 'EOF'
+# Anon config file
+listen=YES
+local_enable=NO
+anonymous_enable=YES
+write_enable=YES
+anon_root=/var/ftp
+secure_chroot_dir=/var/ftp/upload
+#
+# optional
+#
+chown_upload_mode=0666
+anon_umask=022
+allow_writeable_chroot=YES
+banner_file=/etc/vsftpd/banner_file
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+anon_upload_enable=YES
+no_anon_password=YES
+xferlog_enable=YES
+listen_port=21
+#anon_max_rate=2048000
+#listen_address=x.x.x.x
+EOF
+	# Add banner file
+	cat > /etc/vsftpd/banner_file << 'EOF'
+  _   _                  ____              _        _____ _____ ____
+ | | | | ___   ___  _ __/ ___| _ __   __ _| | _____|  ___|_   _|  _ \
+ | |_| |/ _ \ / _ \|  _ \___ \|  _ \ / _  | |/ / _ \ |_    | | | |_) |
+ |  _  | (_) | (_) | |_) |__) | | | | (_| |   <  __/  _|   | | |  __/
+ |_| |_|\___/ \___/| .__/____/|_| |_|\__,_|_|\_\___|_|     |_| |_|
+                   |_|
+ Your escape from the down-under...Copyright 1970
+ - - - - -
+ LOGIN with "anonymous"
+ DO NOT FORGET to change directory to "upload" to upload/download stuff
+EOF
+	# Add vsftpd start file
+	cat > /root/vsftpd.start << 'EOF'
+#!/bin/bash
+vsftpd /etc/vsftpd/vsftpd-anon.conf&
+EOF
+	chmod +x /root/vsftpd.start
+	# Add vsftpd stop file
+	cat > /root/vsftpd.stop << 'EOF'
+#!/bin/bash
+killall vsftpd
+EOF
+	chmod +x /root/vsftpd.stop
+	if [[ $downloadError == 1 ]]; then
+		echo; printError "Something went wrong...one or more downloads didn't complete successfully."
+	else
+		echo; printGood "Done."
+	fi
+}
+
 # Clean old crap from iptables
 cleanIPTables(){
 	tmp=`mktemp`
@@ -1708,8 +1786,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				echo; printStatus "Setting up a static IP."
 				whatInterface
 				setupStaticIP
-#				  echo; printStatus "Installing redirector tools/programs."
-#				  installRecommendedTools
+				installRedirTools
 				echo; printGood "Redirector setup completed."
 				break
 				;;
