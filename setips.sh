@@ -1946,7 +1946,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 						ASK-EACH-TIME )
 						setAskEachTime
-						opMode
+						exit 1
 						break
 						;;
 
@@ -2430,7 +2430,8 @@ else
 			fi
 			OPTINDplus1=$((OPTIND + 1))
 			tgtIP=$OPTARG
-			eval threads=\$$OPTIND
+#			eval threads=\$$OPTIND
+			eval threads=$OPTIND
 			downloadSnortRules
 			# Check config file for correct rules path
 			sed -i '/snort/d' $setipsFolder/setips.conf

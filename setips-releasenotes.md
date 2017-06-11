@@ -3,6 +3,7 @@
 ## Current Version
 Version: '2.8 (2017Mar30-2112)'
 - Set default opMode to "ask"; ready for next event
+- Fixed static IP setup function; added redirector setup w/tools (v2.8a)
 
 Version: '2.7 (2017Feb15-2147)'
 - Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
