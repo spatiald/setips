@@ -1839,7 +1839,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				whatInterface
 				checkForSubinterfaces
 				autoSetIPsOnStart
-				randomizePivotIP
 				cleanIPTables
 				saveIPTables
 				setupSOCKS
@@ -1903,7 +1902,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				listCoreInterfaces
 				whatInterface
 				addSubInts
-				randomizePivotIP
 				autoSetIPsOnStart
 				break
 				;;
