@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.8a
+scriptVersion=2.8b
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -1330,6 +1330,21 @@ flushIPTables(){
 	$iptables -P FORWARD ACCEPT
 }
 
+iptablesToggleRandomSource(){
+	tmp=/tmp/iptables.tmp
+	# Check if current iptables is set to random source address
+	if [[ $(iptables-save | grep "SNAT") ]]; then randomIPs=1; fi
+	if [[ $randomIPs == 1 ]]; then 
+		# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
+		iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
+		echo; printGood "Turned OFF outgoing source IP randomization."
+	else
+		# Randomize source IPs on all outgoing packets
+		randomizePivotIP
+		echo; printGood "Turned ** ON ** outgoing source IP randomization."
+	fi
+}
+
 # Add iptables script to /etc/rc.local
 autoStartIPTables(){
 		sed -i '/iptable*/d' /etc/rc.local
@@ -1710,7 +1725,7 @@ randomizePivotIP(){
 	tmp=/tmp/iptables.tmp
 	iplist="./ips.list"
 	# List subinterface ips randomly and put into file called "intips"
-	ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g'| awk -F:: '{ print $NF }' | head -n -1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | shuf > $iplist
+	ip address show $ethInt |grep "inet" |grep -v "inet6"|awk '{ print $2 }'|cut -d/ -f1 |  grep -v "127.0.0.1" | head -n -1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | shuf > $iplist
 	# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
 	iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
 	# Identify the number of assigned subinterfaces
@@ -1721,6 +1736,7 @@ randomizePivotIP(){
 	done <$iplist
 	rm $iplist
 	# Setup forward rule, if there isn't one
+	iptables-save > $tmp; sed -i "/-A FORWARD -j ACCEPT/d" $tmp; iptables-restore < $tmp; rm $tmp	
 	$iptables -t filter -I FORWARD 1 -j ACCEPT
 }
 
@@ -1922,7 +1938,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Change-Internet-OpMode" "Change-Network-Level" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "IPTables-show" "IPTables-flush" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "IPs-restore-on-startup" "IPs-REMOVE-restore-on-startup" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Install-Recommended-Tools" "Reset-Setips-Config" "Main-Menu"; do
+		select ut in "Change-Internet-OpMode" "Change-Network-Level" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "IPs-restore-on-startup" "IPs-REMOVE-restore-on-startup" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Install-Recommended-Tools" "Reset-Setips-Config" "Main-Menu"; do
 			case $ut in
 				Change-Internet-OpMode )
 				echo; printStatus "Change Internet OpMode"
@@ -1971,6 +1987,11 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				IPTables-flush )
 				flushIPTables
 				echo; printGood "IPTables successfully flushed."
+				break
+				;;
+
+				IPTables-toggle-random-source-IPs )
+				iptablesToggleRandomSource
 				break
 				;;
 

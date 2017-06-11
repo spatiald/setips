@@ -4,6 +4,7 @@
 Version: '2.8 (2017Mar30-2112)'
 - Set default opMode to "ask"; ready for next event
 - Fixed static IP setup function; added redirector setup w/tools (v2.8a)
+- Added function to randomize source IP on all outgoing packets; do not randomize source IPs by default on addInts and SSH SOCKS Proxy functions (v2.8b)
 
 Version: '2.7 (2017Feb15-2147)'
 - Updated inundator (-x option) to check for pre-reqs and install/download, if necessary
