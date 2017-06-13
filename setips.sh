@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.8b
+scriptVersion=2.9
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -86,6 +86,20 @@ fi
 
 stty sane # Fix backspace
 trap cleanup EXIT # Cleanup if script exits for any reason
+
+buildSoftwareList(){
+	cat > $localSoftwareDir/software.lst << 'EOF'
+sublime32.deb
+sublime64.deb
+cobaltstrike
+c2profiles
+veil
+powershellempire
+powersploit
+inundator_0.5_all.deb
+snort-rules
+EOF
+}
 
 createConfig(){
 	cat > $setipsFolder/setips.conf << 'EOF'
@@ -159,20 +173,6 @@ offlineVariables(){
 	snortRulesDownload=""
 }
 
-buildSoftwareList(){
-	cat > $localSoftwareDir/software.lst << 'EOF'
-sublime32.deb
-sublime64.deb
-cobaltstrike
-c2profiles
-veil
-powershellempire
-powersploit
-inundator_0.5_all.deb
-snort-rules
-EOF
-}
-
 printGood(){
 	echo -e "\x1B[01;32m[+]\x1B[0m $1"
 }
@@ -204,12 +204,14 @@ testingScript(){
 }
 
 cleanup(){
-	kill $!; trap 'kill $1' SIGTERM
+	# kill $! # Kills the last run background process
+	trap 'kill $1' SIGTERM
 	# Remove clear screen commands from log file <-- created by the Veil scripts
 	sed -i '/=======/d' $setipsFolder/setips.log
 
 	# Check /etc/rc.local for the execute bit
 	chmod +x /etc/rc.local
+	rm -f /tmp/tmp.*
 	stty sane
 	echo; exit $?
 }
@@ -231,41 +233,41 @@ osCheck(){
 
 opMode(){
 	opModeOnline(){
-	printGood "Script set for 'ONLINE' mode."
-	internet=1
-	setOnline
-	onlineVariables
-	checkInternet
+		printGood "Script set for 'ONLINE' mode."
+		internet=1
+		setOnline
+		onlineVariables
+		checkInternet
 	}
 	opModeOffline(){
-	printGood "Script set for 'OFFLINE' mode."
-	internet=0
-	setOffline
-	offlineVariables
+		printGood "Script set for 'OFFLINE' mode."
+		internet=0
+		setOffline
+		offlineVariables
 	}
 	if [[ -z $internet ]]; then
-	printGood "Script set for 'ASK EVERY TIME' mode."
-	echo; printQuestion "Do you want to run in ONLINE or OFFLINE mode?"
-	select MODE in "ONLINE" "OFFLINE"; do
-		case $MODE in
-		# ONLINE
-		ONLINE)
-		opModeOnline
-		break
-		;;
-		# OFFLINE
-		OFFLINE)
-		opModeOffline
-		break
-		;;
-		esac
-		printGood "Done."
-		break
-	done
+		printGood "Script set for 'ASK EVERY TIME' mode."
+		echo; printQuestion "Do you want to run in ONLINE or OFFLINE mode?"
+		select MODE in "ONLINE" "OFFLINE"; do
+			case $MODE in
+			# ONLINE
+			ONLINE)
+			opModeOnline
+			break
+			;;
+			# OFFLINE
+			OFFLINE)
+			opModeOffline
+			break
+			;;
+			esac
+			printGood "Done."
+			break
+		done
 	elif [[ $internet == "0" ]]; then
-	opModeOffline
+		opModeOffline
 	elif [[ $internet == "1" ]]; then
-	opModeOnline
+		opModeOnline
 	fi
 }
 
@@ -273,28 +275,28 @@ opMode(){
 checkInternet(){
 	echo; printStatus "Checking internet connectivity..."
 	if [[ $internet == "1" || -z $internet ]]; then
-	# Check internet connecivity
-	WGET=`which wget`
-	$WGET -q --tries=10 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
-	if [[ $? -eq 0 ]]; then
-		printGood "Internet connection confirmed...continuing."
-		internet=1
-	else
-		printError "No internet connectivity; waiting 10 seconds and then I will try again."
-		# Progress bar to visualize wait period
-		while true;do echo -n .;sleep 1;done &
-		sleep 10
-		kill $!; trap 'kill $!' SIGTERM
-		$WGET -q --tries=10 --timeout=5 --spider http://google.com
+		# Check internet connecivity
+		WGET=`which wget`
+		$WGET -q --tries=10 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
 		if [[ $? -eq 0 ]]; then
-		echo; printGood "Internet connected confirmed...continuing."
-		internet=1
+			printGood "Internet connection confirmed...continuing."
+			internet=1
 		else
-		echo; printError "No internet connectivity; entering 'OFFLINE' mode."
-		offlineVariables
-		internet=0
+			printError "No internet connectivity; waiting 10 seconds and then I will try again."
+			# Progress bar to visualize wait period
+			while true;do echo -n .;sleep 1;done &
+			sleep 10
+			kill $!; trap 'kill $!' SIGTERM
+			$WGET -q --tries=10 --timeout=5 --spider http://google.com
+			if [[ $? -eq 0 ]]; then
+				echo; printGood "Internet connected confirmed...continuing."
+				internet=1
+			else
+				echo; printError "No internet connectivity; entering 'OFFLINE' mode."
+				offlineVariables
+				internet=0
+			fi
 		fi
-	fi
 	fi
 }
 
@@ -325,9 +327,7 @@ collectInfo(){
 	if [[ ! -f $setipsFolder/subnet.current ]]; then
 		whatInterface
 		currentCoreIP=$(ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | cut -d/ -f1)
-#		currentCoreIP=$($ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f2 | cut -d" " -f1) #commented for cg/cf
 		currentCoreNetmask=$(ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | cut -d/ -f2)
-#		currentCoreNetmask=$(ifconfig $ethInt | grep "inet addr" | head -n 1 | cut -d":" -f4) #commented for cg/cf
 		if [[ $ipcalc ]]; then
 			$ipcalc $currentCoreIP/$currentCoreNetmask | grep Netmask | cut -d" " -f6 > $setipsFolder/subnet.current
 		else
@@ -459,7 +459,9 @@ installAdditionalSoftware(){
 		mkdir -p $empireDir
 		$empireDownload
 		commandStatus
-		$empireDir/setup/install.sh
+		cd $empireDir/setup
+		./reset.sh
+		./install.sh
 	else
 		printGood "Powershell Empire folder exists, moving on."
 	fi
@@ -551,7 +553,7 @@ downloadInundator(){
 	echo; printStatus "Checking that Inundator is installed..."
 	if [[ ! `which inundator` ]]; then
 		printStatus "Inundator is not installed; installing now."
-		apt-get -y install libnet-socks-perl
+		apt-get -y install libnet-socks-perl libnet-cidr-perl
 		$inundatorDownload
 		dpkg -i $localSoftwareDir/inundator_0.5_all.deb
 		commandStatus
@@ -628,20 +630,46 @@ offlineSoftwareRepoStatus(){
 	fi
 }
 
-# Find the IP addresses in use
+# List IPs with interface assignments, one per line
 listIPs(){
 	echo; printStatus "Ethernet interfaces that have assigned addresses:"
-##	ints=$(netstat -i | sed "/MTU/d" | sed "/Kernel/d" | sed "/lo/d" | sed "/:/d" | awk '{ print $1 }')
-##	for i in $ints; do echo "$(ip address show $ethInt |grep "inet" |grep -v "inet6"|awk '{ print $2, $7, $8 }')"; done
-	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2, $7, $8 }' | grep -v "127.0.0.1/8"
+	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2, $7, $8 }' | sed '/127.0/d'
+}
+
+# List only subinterface assignments, one per line
+listSubIntIPs(){
+	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2, $7, $8 }' | sed '/127.0/d' | tail -n +2
+}
+
+# List IPs, one per line
+listIPsOnly(){
+	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | cut -d/ -f1 | sed '/127.0/d'
+}
+
+# List IPs, single line, comma-seperated for use in Armitage/Cobalt Strike "Teamserver"
+listIPs-oneline(){
+	listIPsOnly | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//'
+}
+
+# List subinterface IPs, one per line
+listSubIntIPsOnly(){
+	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | sed '/127.0/d' | tail -n +2 | cut -d/ -f1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d'
+}
+
+# List interfaces available
+listInts(){
+	ip address show | grep "mtu" | awk '{ print $2 }' | sed "s/://g" | sed "/lo/d"
+}
+
+# List subints, one per line
+listSubInts(){
+	ip address show | grep secondary | awk '{ print $8 }'
 }
 
 # Find the core IP address in use
 listCoreInterfaces(){
 	echo; printStatus "Core IP addresses on this system:"
-##	ints=$(netstat -i | sed "/MTU/d" | sed "/Kernel/d" | sed "/lo/d" | sed "/:/d" | awk '{ print $1 }')
-##	for i in $ints; do echo "$(ip address show $ethInt | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }')"; done
-	ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | grep -v "127.0.0.1/8"
+	ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | sed '/127.0/d'
 }
 
 # Show only the core IP address (for setupteamserver function)
@@ -732,7 +760,7 @@ dualGateways(){
 	echo; echo "Enter network info using the following example:"
 	echo "<ip> <cidr> <network-address> <gateway-ip>"
 	echo "192.168.100.5 24 192.168.100.0 192.168.100.1"
-	ethIntList=$($ifconfig -a | grep "Link encap" | grep -v "lo" | awk '{ print $1 }')
+	ethIntList=$(listInts)
 	echo; printQuestion "What is Network 1's ethernet interface?"
 	select int in $ethIntList; do
 		network1EthInt=$int
@@ -747,7 +775,7 @@ dualGateways(){
 			echo "Please enter Network 1's info again with space separation (for example, enter <ip> <cidr> <network-address> <gateway-ip)"
 		fi
 	done
-	ethIntList=$($ifconfig -a | grep "Link encap" | grep -v "lo" | awk '{ print $1 }')
+	ethIntList=$(listInts)
 	echo; printQuestion "What is Network 2's ethernet interface?"
 	select int in $ethIntList; do
 		network2EthInt=$int
@@ -810,16 +838,16 @@ dualGateways(){
 
 # Remove all subinterfaces
 removeSubInts(){
-	rm -f /tmp/sub.txt
-#	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
-	ip addr show eth0 | grep inet | grep -v inet6 | awk '{ print $8 }' | tail -n +2 >> /tmp/sub.txt
+	tmp=`mktemp`
+	rm -f $tmp
+	ip addr show eth0 | grep inet | grep -v inet6 | awk '{ print $8 }' | tail -n +2 >> $tmp
 	while IFS= read sub; do
 	$ifconfig $sub down > /dev/null 2>&1
-	done < "/tmp/sub.txt"
+	done < "$tmp"
 
-	if [[ -s /tmp/sub.txt ]]; then
+	if [[ -s $tmp ]]; then
 		echo; printStatus "Removed subinterface(s):"
-		cat /tmp/sub.txt
+		cat $tmp
 	fi
 }
 octet1NumCheck(){
@@ -983,16 +1011,12 @@ addSubInts(){
 
 	# Add subnet to backup file
 	echo $subnet > $setipsFolder/subnet.current
-
 	echo; printQuestion "What subinterface number would you like to start assigning ips to?"; read subNum; subNum=$((subNum-1))
 	while IFS= read ip; do
 		subNum=$((subNum+1))
 		$ifconfig $ethInt:$subNum $ip mtu $mtu
 	done < "$tmpIPs"
 	printGood "Done."; echo
-
-##	cp -f $tmpIPs $ipsSaved
-
 	saveCurrentIPs
 
 	# Append ips to running log
@@ -1002,20 +1026,20 @@ addSubInts(){
 	printGood "Your IP settings were saved to three files:";
 	echo "   - $ipsSaved -> restore them with this program";
 	echo "   - $ipsArchive -> running log of all IPs used during an exercise/event";
-#	   rm -rf /tmp/ips*.txt /tmp/sub.txt > /dev/null 2>&1  # Keep so we can use in other functions
 }
 
 # Check for subinterfaces
 checkForSubinterfaces(){
-	$ifconfig | grep $ethInt |cut -d" " -f1 |tail -n +2 >> /tmp/sub.txt
-	if [[ ! -s /tmp/sub.txt ]]; then
+	tmp=`mktemp`
+	listSubInts >> $tmp
+	if [[ ! -s $tmp ]]; then
 		echo; printQuestion "No subinterfaces exist...would you like to create some? (y/N) "; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			addSubInts
 		fi
 	else
 		echo; printStatus "Current subinterfaces:"
-		ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/addr//g' |awk -F:: '{ print $1 " " $NF }' | sed "/lo/d" | tail -n +2
+		listSubIntIPs
 		echo; printQuestion "Do you want to change your current subinterface IPs? (y/N) "; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			removeSubInts
@@ -1063,7 +1087,7 @@ setGateway(){
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		echo; printQuestion "What is the IP of the gateway?"; read gatewayip || return
 		# Remove current gw
-		route del default gw $currentgw
+		route del default gw $currentgw > /dev/null 2>&1
 		# Add new gw
 		route add default gw $gatewayip
 		newgw=`route -n|grep $ethInt|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
@@ -1106,16 +1130,11 @@ saveCurrentIPs(){
 # Auto set subinterface IPs on system start/reboot
 autoSetIPsOnStart(){
 	rm /root/setips-atstart.sh > /dev/null 2>&1 # check for old version
-
 	saveCurrentIPs
-#	subnet=`cat $setipsFolder/subnet.current`
-#	$ifconfig |grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print $1 " " $NF }' | sed -e "s/$/\/$subnet/" | sed "/lo/d" > $ipsSaved
 	removeSetIPsOnStart
-	gatewayip=`route -n|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10`
-	if [[ ! -z ${gateway:+x} ]]; then
-		setGateway
-	fi
-	sed "s,%SETIPSFOLDER%,$setipsFolder,g;s,%GATEWAYIP%,$gatewayip,g" >$setipsFolder/setips-atboot.sh << 'EOF'
+	gatewayIP=$(route -n|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10)
+	if [[ -z ${gatewayIP:+x} ]]; then setGateway; fi
+	sed "s,%SETIPSFOLDER%,$setipsFolder,g;s,%GATEWAYIP%,$gatewayIP,g" >$setipsFolder/setips-atboot.sh << 'EOF'
 #!/bin/bash
 #Auto-generated script - DO NOT REMOVE
 #
@@ -1153,7 +1172,7 @@ autoStartSOCKSProxy(){
 	sed -i '$e echo "#SOCKS - Auto-start SOCKS proxy on startup using screen"' /etc/rc.local
 	sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
 	rm -f /tmp/ssh.tmp
-	echo; echo; printGood "Added SOCKS proxy auto-start script to /etc/rc.local"
+	echo; printGood "Added SOCKS proxy auto-start script to /etc/rc.local"
 }
 
 setupStaticIP(){
@@ -1170,7 +1189,7 @@ setupStaticIP(){
 			# Add subnet to backup file
 			echo $subnet > $setipsFolder/subnet.current
 			echo; printGood "Your $ethInt interface is setup:"
-			echo; $ifconfig $ethInt
+			echo; listIPs
 			if [[ ! $(cat /etc/network/interfaces | grep gateway) ]]; then
 				echo; printQuestion "Do you want to setup a default gateway and DNS? (y/N)"; read REPLY
 				if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -1220,6 +1239,11 @@ setupStaticIP(){
 	fi
 }
 
+# Display SOCKS proxies
+displayProxies(){
+	ip address show $ethInt |grep "inet" |grep -v "inet6"|awk '{ print $2 }'|cut -d/ -f1 |  grep -v "127.0.0.1" | tail -n +2 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | awk -F:: '{ print "socks4 " $NF }' | awk '{ print $0 "'" $proxyport"'"}'
+}
+
 # Setup SOCKS proxy
 setupSOCKS(){
 	# Check for dependencies
@@ -1231,9 +1255,9 @@ setupSOCKS(){
 			break
 		fi
 	fi
-	if [[ -f $setipsFolder/proxies.current ]]; then
+	if netstat -antp | grep -v grep | grep ::: | grep -v sshd | grep ssh > /dev/null; then
 		echo; printStatus "You currently have proxies running on the following ports:"
-		cat $setipsFolder/proxies.current
+		netstat -antp | grep -v grep | grep ::: | grep -v sshd | grep ssh
 		echo; printQuestion "Do you want to remove them? (y/N)"; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			echo; printStatus "Killing previous setips SSH SOCKS proxies."
@@ -1247,9 +1271,9 @@ setupSOCKS(){
 	echo "	You will be returned to the setips menu when setup is complete."
 	echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
 	while :; do
-		if netstat -antp |grep 0.0.0.0:$proxyport
-		then
+		if netstat -antp | grep "0.0.0.0:$proxyport "; then
 			echo; printError "Something is already listening on that port, please try a different port."
+			echo; netstat -antp | grep ":$proxyport "
 			echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
 		else
 			break
@@ -1296,7 +1320,7 @@ setupSOCKS(){
 		fi
 	done
 	echo; echo "To use, copy the following to the end of your local /etc/proxychains.conf file (replace any other proxies in the file):"
-	$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print "socks4 " $NF }' | awk '{ print $0 "'" $proxyport"'"}' | head -n -1
+	displayProxies
 
 	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in the /etc/rc.local file)
 	echo; printQuestion "Would you like the SOCKS proxy to start on reboot? (y/N)"; read REPLY
@@ -1331,7 +1355,7 @@ flushIPTables(){
 }
 
 iptablesToggleRandomSource(){
-	tmp=/tmp/iptables.tmp
+	tmp=`mktemp`
 	# Check if current iptables is set to random source address
 	if [[ $(iptables-save | grep "SNAT") ]]; then randomIPs=1; fi
 	if [[ $randomIPs == 1 ]]; then 
@@ -1484,8 +1508,9 @@ setupAnotherRedirector(){
 
 # Save Pivot Rules to $setipsFolder/pivot.rules
 savePivotRules(){
-	date +"%Y%b%d-%H%M" > /tmp/currentDateTime
-	pivotRulesBackupFile="pivotRules-$(cat /tmp/currentDateTime)"
+	tmp=`mktemp`
+	date +"%Y%b%d-%H%M" > $tmp
+	pivotRulesBackupFile="pivotRules-$(cat $tmp)"
 	iptables-save |grep DNAT | awk -F" " '{print $6 " " $4 " " $10 " " $14}'| sed 's/:/ /g' | sed 's/\/32//g' > $pivotRulesBackup/$pivotRulesBackupFile
 	cp $pivotRulesBackup/$pivotRulesBackupFile $setipsFolder/pivotRules.current
 	echo; printGood "Backup of pivot rules saved to $pivotRulesBackup/$pivotRulesBackupFile"
@@ -1505,9 +1530,9 @@ setupSocatPivot(){
 	fi
 	echo; printQuestion "What port do you want to pivot (i.e. listen on)?"; read socatport
 	while true; do
-		if [[ $(netstat -antp | grep 0.0.0.0:$socatport) || $(netstat -antp | grep 127.0.0.1:$socatport) ]]; then
+		if [[ $(netstat -antp | grep "0.0.0.0:$socatport ") || $(netstat -antp | grep "127.0.0.1:$socatport ") ]]; then
 			echo; printError "Something is already listening on that port, please try a different port."
-			echo; netstat -antp | grep $socatport
+			echo; netstat -antp | grep ":$socatport "
 			echo; printQuestion "What port do you want to pivot (i.e. the one socat will listen for)?"; read socatport
 		else
 			break
@@ -1516,14 +1541,21 @@ setupSocatPivot(){
 	echo; printQuestion "What is the redteam *IP* the pivot redirects incoming traffic to?"; read redteamip
 	echo; printQuestion "What is the redteam *PORT* the pivot redirects incoming traffic to?"; read redteamport
 	socat -d -d -d -lf $setipsFolder/socat.log TCP-LISTEN:$socatport,reuseaddr,fork,su=nobody TCP:$redteamip:$redteamport&
+	disown
 	if [[ $(netstat -antp | grep -v grep | grep socat | grep $socatport | wc -l) -ge "1" ]]; then
 		echo; printGood "SUCCESS! Socat pivot setup; logging to $setipsFolder/socat.log"
 		netstat -antp | grep socat
-		break
 	else
 		echo; printError "FAIL...looks like the socat pivot didn't setup correctly, check $setipsFolder/socat.log for errors."
-		break
 	fi
+}
+
+# Stop SOCKS proxy
+stopSocatPivot(){
+	tmp=`mktemp`
+	netstat -antp | grep socat | awk '{ print $7 }' | cut -d/ -f1 > $tmp
+	while read p; do kill -9 $p; done < $tmp
+	rm -f $tmp
 }
 
 # Setup Cobaltstrike Teamserver
@@ -1713,8 +1745,9 @@ cleanIPTables(){
 
 # Save IPTables for historical purposes
 saveIPTables(){
-	date +"%Y%b%d-%H%M" > /tmp/currentDateTime
-	iptablesBackupFile="iptables-$(cat /tmp/currentDateTime)"
+	tmp=`mktemp`
+	date +"%Y%b%d-%H%M" > $tmp
+	iptablesBackupFile="iptables-$(cat $tmp)"
 	iptables-save > $iptablesBackup/$iptablesBackupFile
 	cp $iptablesBackup/$iptablesBackupFile $setipsFolder/iptables.current
 	echo; printGood "Backup of iptables rules saved to $iptablesBackup/$iptablesBackupFile"
@@ -1725,7 +1758,7 @@ randomizePivotIP(){
 	tmp=/tmp/iptables.tmp
 	iplist="./ips.list"
 	# List subinterface ips randomly and put into file called "intips"
-	ip address show $ethInt |grep "inet" |grep -v "inet6"|awk '{ print $2 }'|cut -d/ -f1 |  grep -v "127.0.0.1" | head -n -1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d' | shuf > $iplist
+	listSubIntIPsOnly | shuf > $iplist
 	# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
 	iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
 	# Identify the number of assigned subinterfaces
@@ -1936,7 +1969,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Change-Internet-OpMode" "Change-Network-Level" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "IPs-restore-on-startup" "IPs-REMOVE-restore-on-startup" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Install-Recommended-Tools" "Reset-Setips-Config" "Main-Menu"; do
+		select ut in "Change-Internet-OpMode" "Change-Network-Level" "Set-Gateway" "Set-DNS" "Fix-SSH-Without-Password" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "IPs-restore-on-startup" "IPs-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Install-Recommended-Tools" "Reset-Setips-Config" "Main-Menu"; do
 			case $ut in
 				Change-Internet-OpMode )
 				echo; printStatus "Change Internet OpMode"
@@ -2018,6 +2051,12 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				break
 				;;
 
+				SOCAT-Pivots-REMOVE-ALL )
+				stopSocatPivot
+				echo; printGood "All SOCAT pivoting stopped."
+				break
+				;;
+
 				SOCKS-Proxy-setup )
 				setupSOCKS
 				echo; printGood "SSH SOCKS Proxy started."
@@ -2078,7 +2117,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				Proxychains )
 				echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
 				echo; echo "Copy the following to the end of /etc/proxychains.conf"
-				$ifconfig | grep -B1 "inet addr" |awk '{ if ( $1 == "inet" ) { print $2 } else if ( $2 == "Link" ) { printf "%s:" ,$1 } }' | sed 's/[addr]//g' | awk -F:: '{ print "socks4 " $NF }' | awk '{ print $0 "'" $proxyport"'"}' | head -n -1
+				displayProxies
 				break
 				;;
 
@@ -2194,7 +2233,7 @@ printGood "Network level is:  $networkLevel"
 
 # Ask to run interface setup or, if setup, collect information
 if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
-	checkForIP=$($ifconfig | awk '/inet addr/{print substr($2,6)}' | head -n -1 | wc -l)
+	checkForIP=$($listIPs | wc -l)
 	if [[ $checkForIP -ge "1" ]]; then
 		echo; printStatus "I need to collect some info since you already have your interface setup."
 		collectInfo

@@ -1,6 +1,9 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '2.9 (2017Jun12-2311)'
+- Major code cleanup to minimize ifconfig use; bug fix most functions; add function to remove socat pivots (v2.9)
+
 Version: '2.8 (2017Mar30-2112)'
 - Set default opMode to "ask"; ready for next event
 - Fixed static IP setup function; added redirector setup w/tools (v2.8a)
