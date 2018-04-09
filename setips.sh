@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=2.9
+scriptVersion=3.0
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -209,9 +209,9 @@ cleanup(){
 	# Remove clear screen commands from log file <-- created by the Veil scripts
 	sed -i '/=======/d' $setipsFolder/setips.log
 
-	# Check /etc/rc.local for the execute bit
-	chmod +x /etc/rc.local
-	rm -f /tmp/tmp.*
+	# # Check /etc/rc.local for the execute bit
+	# chmod +x /etc/rc.local
+	# rm -f /tmp/tmp.*
 	stty sane
 	echo; exit $?
 }
@@ -1131,7 +1131,7 @@ saveCurrentIPs(){
 autoSetIPsOnStart(){
 	rm /root/setips-atstart.sh > /dev/null 2>&1 # check for old version
 	saveCurrentIPs
-	removeSetIPsOnStart
+	removeSetIPsOnStart > /dev/null
 	gatewayIP=$(route -n|grep 0.0.0.0|grep G|head -n 1|cut -d"." -f4-7|cut -d" " -f10)
 	if [[ -z ${gatewayIP:+x} ]]; then setGateway; fi
 	sed "s,%SETIPSFOLDER%,$setipsFolder,g;s,%GATEWAYIP%,$gatewayIP,g" >$setipsFolder/setips-atboot.sh << 'EOF'
@@ -1148,15 +1148,30 @@ done < %SETIPSFOLDER%/ips-saved.txt
 route add default gw %GATEWAYIP%
 EOF
 	chmod +x $setipsFolder/setips-atboot.sh
-	sed -i '$e echo "#setips - Auto-set IPs on startup using setips-atboot.sh script"' /etc/rc.local
-	sed -i '$e echo "'$setipsFolder'/setips-atboot.sh&"' /etc/rc.local
-	awk 'BEGIN{OFS=FS="/"} $1~/$setipsFolder/ {$1="'$setipsFolder'";}1' /etc/rc.local > /tmp/rclocal.tmp; mv /tmp/rclocal.tmp /etc/rc.local
+	# rc.local cleanup
+	# sed -i '$e echo "#setips - Auto-set IPs on startup using setips-atboot.sh script"' /etc/rc.local
+	# sed -i '$e echo "'$setipsFolder'/setips-atboot.sh&"' /etc/rc.local
+	# awk 'BEGIN{OFS=FS="/"} $1~/$setipsFolder/ {$1="'$setipsFolder'";}1' /etc/rc.local > /tmp/rclocal.tmp; mv /tmp/rclocal.tmp /etc/rc.local
+	cat > /etc/systemd/system/setips_atboot.service << EOF
+[Unit]
+Description="Auto-set IPs on startup using setips-atboot.sh script"
+After=network.target
+
+[Service]
+ExecStart=$setipsFolder/setips-atboot.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	systemctl enable setips_atboot.service
 }
 
-# Remove setips script from /etc/rc.local
+# Remove systemd unit file for setting IPs at boot
 removeSetIPsOnStart(){
-	sed -i '/setips-atboot/d' /etc/rc.local
-	rm -f /root/setips-atboot.sh
+	# rc.local delete
+	# sed -i '/setips-atboot/d' /etc/rc.local
+	# rm -f /root/setips-atboot.sh
+	systemctl disable setips_atboot.service
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
@@ -1166,13 +1181,26 @@ fixSSHConfigRoot(){
 	echo; printGood "Modified /etc/ssh/sshd_config file to allow root to login with a password, restarted ssh."
 }
 
-# Add ssh socks proxy to /etc/rc.local
+# Create systemd unit file for starting SOCKS proxy
 autoStartSOCKSProxy(){
-	sed -i '/screen/d' /etc/rc.local
-	sed -i '$e echo "#SOCKS - Auto-start SOCKS proxy on startup using screen"' /etc/rc.local
-	sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
-	rm -f /tmp/ssh.tmp
-	echo; printGood "Added SOCKS proxy auto-start script to /etc/rc.local"
+	# rc.local delete
+	# sed -i '/screen/d' /etc/rc.local
+	# sed -i '$e echo "#SOCKS - Auto-start SOCKS proxy on startup using screen"' /etc/rc.local
+	# sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
+	# rm -f /tmp/ssh.tmp
+	cat > /etc/systemd/system/autostart_socks.service << EOF
+[Unit]
+Description="Auto-start SOCKS proxy on startup using screen"
+After=network.target
+
+[Service]
+ExecStart=$autostartSOCKS
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	systemctl enable autostart_socks.service
+	echo; printGood "Created systemd unit file for starting SOCKS proxy"
 }
 
 setupStaticIP(){
@@ -1305,7 +1333,7 @@ setupSOCKS(){
 	sshPort=`netstat -antp | grep "sshd" | head -n 1 | cut -d":" -f2| cut -d" " -f1`
 	while :; do
 		(sleep 2; echo $password; sleep 2; echo ""; sleep 1) | socat - EXEC:"screen -S ssh ssh -o StrictHostKeyChecking=no -gD$proxyport -p $sshPort -l root localhost",pty,setsid,ctty > /dev/null
-		echo "(sleep 2; echo $password; sleep 2; echo ""; sleep 1) | socat - EXEC:'screen -S ssh ssh -o StrictHostKeyChecking=no -p $sshPort -gD"$proxyport" -l root localhost',pty,setsid,ctty" > /tmp/ssh.tmp
+		export autostartSOCKS="(sleep 2; echo $password; sleep 2; echo \"\"; sleep 1) | socat - EXEC:'screen -S ssh ssh -o StrictHostKeyChecking=no -p $sshPort -gD\"$proxyport\" -l root localhost',pty,setsid,ctty"
 		if netstat -antp | grep -v grep | grep $proxyport > /dev/null; then
 			echo; printGood "SUCCESS...SOCKS proxy started on Port $proxyport."
 			echo $proxyport >> $setipsFolder/proxies.current
@@ -1322,12 +1350,13 @@ setupSOCKS(){
 	echo; echo "To use, copy the following to the end of your local /etc/proxychains.conf file (replace any other proxies in the file):"
 	displayProxies
 
-	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in the /etc/rc.local file)
+	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in a systemd unit file)
 	echo; printQuestion "Would you like the SOCKS proxy to start on reboot? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		autoStartSOCKSProxy
-	else
-		rm -f /tmp/ssh.tmp
+	# rc.local delete
+	# else
+		# rm -f /tmp/ssh.tmp
 	fi
 }
 
@@ -1336,7 +1365,9 @@ stopSOCKS(){
 	screen -ls |grep ssh|cut -d"." -f1|cut -b2- > /tmp/socks.tmp
 	while read p; do screen -X -S $p.ssh kill; done < /tmp/socks.tmp
 	rm -f /tmp/socks.tmp
-	sed -i '/screen/d' /etc/rc.local
+	# rc.local delete
+	# sed -i '/screen/d' /etc/rc.local
+	systemctl disable autostart_socks.service
 	rm -f $setipsFolder/proxies.current
 }
 
@@ -1369,17 +1400,32 @@ iptablesToggleRandomSource(){
 	fi
 }
 
-# Add iptables script to /etc/rc.local
+# Create systemd unit file to restore iptable rules on reboot
 autoStartIPTables(){
-		sed -i '/iptable*/d' /etc/rc.local
-		sed -i '$e echo "#IPTables - Restore iptable rules on reboot"' /etc/rc.local
-		sed -i '$e echo "iptables-restore < PATHTO"' /etc/rc.local
-		awk 'BEGIN{OFS=FS=" "} $1~/iptables-restore/ {$3="'$setipsFolder'/iptables.current";}1' /etc/rc.local > /tmp/iptables.tmp; mv /tmp/iptables.tmp /etc/rc.local
+	# rc.local delete
+	# sed -i '/iptable*/d' /etc/rc.local
+	# sed -i '$e echo "#IPTables - Restore iptable rules on reboot"' /etc/rc.local
+	# sed -i '$e echo "iptables-restore < PATHTO"' /etc/rc.local
+	# awk 'BEGIN{OFS=FS=" "} $1~/iptables-restore/ {$3="'$setipsFolder'/iptables.current";}1' /etc/rc.local > /tmp/iptables.tmp; mv /tmp/iptables.tmp /etc/rc.local
+	cat > /etc/systemd/system/restore_iptables.service << EOF
+[Unit]
+Description="Restore iptable rules on reboot"
+After=network.target
+
+[Service]
+ExecStart=iptables-restore < $setipsFolder/iptables.current
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	systemctl enable restore_iptables.service
 }
 
-# Remove iptables reinstall script from /etc/rc.local
+# Remove systemd unit file to restore iptable rules on reboot
 removeStartIPTables(){
-	sed -i '/iptable/d' /etc/rc.local
+	# rc.local delete
+	# sed -i '/iptable/d' /etc/rc.local
+	systemctl disable restore_iptables.service
 }
 
 # Display the current IPTables list
@@ -1395,7 +1441,7 @@ displayIPTables(){
 
 # Flush current IPTables rules
 flushIPTablesPivotRules(){
-	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in the /etc/rc.local file)
+	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in a systemd unit file)
 	if [[ $iptablesCount == 1 ]]; then
 		echo
 		printQuestion "Do you want to delete your current 1-to-1 NAT rules (y/n)? "; read REPLY
@@ -2028,26 +2074,26 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 				IPTables-restore-on-startup )
 				autoStartIPTables
-				echo; printGood "Added iptables restore script to /etc/rc.local."
+				echo; printGood "Created systemd unit file to restore iptable rules on reboot."
 				break
 				;;
 
 				IPTables-REMOVE-restore-on-startup )
 				removeStartIPTables
-				echo; printGood "Removed iptables auto-set script."
+				echo; printGood "Removed systemd unit file to restore iptable rules on reboot."
 				break
 				;;
 
 				IPs-restore-on-startup )
 				whatInterface
 				autoSetIPsOnStart
-				echo; printGood "Added setips auto-set script to /etc/rc.local."
+				echo; printGood "Created systemd unit file to restore IPs on reboot."
 				break
 				;;
 
 				IPs-REMOVE-restore-on-startup )
 				removeSetIPsOnStart
-				echo; printGood "Removed setips auto-set script."
+				echo; printGood "Removed systemd unit file to restore IPs on reboot."
 				break
 				;;
 
@@ -2155,7 +2201,7 @@ done
 }
 
 printHelp(){
-	echo "setips.sh Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
+	echo "Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "	   [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>]"
 	echo "	   [-u] [-x <victim IP> <# of threads>] [-z]"
 	echo
