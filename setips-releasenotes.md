@@ -1,6 +1,11 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.0 (2018Apr10-1701)'
+- Requires >= Kali 2018.1 or Ubuntu 17.04
+- Removed /etc/resolv.conf
+- Converted to systemd
+
 Version: '2.9 (2017Jun12-2311)'
 - Major code cleanup to minimize ifconfig use; bug fix most functions; add function to remove socat pivots (v2.9)
 
