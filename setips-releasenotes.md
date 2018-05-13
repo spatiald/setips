@@ -1,6 +1,11 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.0c (2018May13-1646)'
+- Cyber Guard 2018 Version
+- Updated sshfix script to run on setips script run and use systemd commands (enables ssh service and allows passwords)
+- On newer Ubuntu/Kali releases, ip forwarding is enabled in /etc/sysctl.conf (fixed!)
+
 Version: '3.0 (2018Apr10-1701)'
 - Requires >= Kali 2018.1 or Ubuntu 17.04
 - Removed /etc/resolv.conf
