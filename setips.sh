@@ -1776,8 +1776,8 @@ cleanIPTables(){
 	# older forwarding technique
 	echo 1 > /proc/sys/net/ipv4/ip_forward
 	# newer forwarding technique
-	sed -i '/net.ipv4.ip_forward=1/s/^/#/g' /etc/sysctl.conf
-	sed -i '/net.ipv6.conf.all.forwarding=1/s/^/#/g' /etc/sysctl.conf
+	sed -i '/net.ipv4.ip_forward=1/s/^#//g' /etc/sysctl.conf
+	sed -i '/net.ipv6.conf.all.forwarding=1/s/^#//g' /etc/sysctl.conf
 	sysctl -p
 	sysctl --system
 	iptables-save | uniq > $tmp; sed -i "/MASQUERADE/d" $tmp
