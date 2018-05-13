@@ -22,11 +22,11 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=3.0
+scriptVersion=3.0c
 
 # CHANGE THESE for every exercise (if needed)
-_defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
-_internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
+_defaultMTU=1300 # IO Range requires 1300, normal networks are 1500
+_internet="0" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 _networkLevel="Off" # "Off", "Low", or "High"; if set "Off", script will not prompt and use "Low" for settings
 ## Redteam Share IP info and user
 _redteamShareAuth="1" # "0"=No user auth, "1"=Use user auth
@@ -130,7 +130,7 @@ osIssue="$(cat /etc/issue|awk -F '\' '{ print $1 }')"
 osVersion=$(awk -F '=' '/VERSION_ID=/ {print $2}' /etc/os-release 2>&-)
 osFullVersion=$(awk -F '=' '/VERSION=/ {print $2}' /etc/os-release 2>&-)
 currentDateTime=$(date +"%Y%b%d-%H%M")
-currentgw=$(route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10)
+#currentgw=$(route -n|grep eth0| head -n 1|cut -d"." -f4-7|cut -d" " -f10)
 ipsSaved="$setipsFolder/ips-saved.txt" # Save file for restoring IPs
 ipsArchive="$setipsFolder/ips-archive.txt" # IP archive listed by date/time for reference during exercises
 pivotRulesBackup="$setipsFolder/pivotRules"
@@ -840,7 +840,7 @@ dualGateways(){
 removeSubInts(){
 	tmp=`mktemp`
 	rm -f $tmp
-	ip addr show eth0 | grep inet | grep -v inet6 | awk '{ print $8 }' | tail -n +2 >> $tmp
+	ip addr show $ethInt | grep inet | grep -v inet6 | awk '{ print $8 }' | tail -n +2 >> $tmp
 	while IFS= read sub; do
 	$ifconfig $sub down > /dev/null 2>&1
 	done < "$tmp"
@@ -1177,8 +1177,9 @@ removeSetIPsOnStart(){
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
 fixSSHConfigRoot(){
 	awk 'BEGIN{OFS=FS=" "} $1~/PermitRootLogin/ {$2="yes";}1' /etc/ssh/sshd_config > /tmp/sshd_config.tmp; mv /tmp/sshd_config.tmp /etc/ssh/sshd_config
-	service ssh restart
-	echo; printGood "Modified /etc/ssh/sshd_config file to allow root to login with a password, restarted ssh."
+	echo; printStatus "Checking SSH service is enabled and accepts passwords."
+	systemctl restart ssh
+	systemctl enable ssh
 }
 
 # Create systemd unit file for starting SOCKS proxy
@@ -1771,8 +1772,14 @@ cleanIPTables(){
 	tmp=`mktemp`
 	tmp2=`mktemp`
 	tmpDNAT=`mktemp`
-	# Clean duplicate items that are next to each other; remove old MASQUERADE method of "proxying"
+	# Clean duplicate items that are next to each other; enable ipv4/ipv6 forwarding; remove old MASQUERADE method of "proxying"
+	# older forwarding technique
 	echo 1 > /proc/sys/net/ipv4/ip_forward
+	# newer forwarding technique
+	sed -i '/net.ipv4.ip_forward=1/s/^/#/g' /etc/sysctl.conf
+	sed -i '/net.ipv6.conf.all.forwarding=1/s/^/#/g' /etc/sysctl.conf
+	sysctl -p
+	sysctl --system
 	iptables-save | uniq > $tmp; sed -i "/MASQUERADE/d" $tmp
 	# Clean duplicate items NOT next to each other; save off DNAT list to tmp.snat then remove all DNAT entries for tmp iptables file
 	cat $tmp | grep "DNAT" | sort -u > $tmpDNAT; sed -i "/DNAT/d" $tmp
@@ -2276,6 +2283,9 @@ fi
 # Check network level
 networkLevelSet
 printGood "Network level is:  $networkLevel"
+
+# Checking ssh service is turned on and enabled for password login (Added for Don *grin*)
+fixSSHConfigRoot
 
 # Ask to run interface setup or, if setup, collect information
 if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
