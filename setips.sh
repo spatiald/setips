@@ -2156,18 +2156,22 @@ fi
 checkSSH
 
 # Check if netplan.io is being used
-printStatus "Checking if netplan.io is used for managing your network."
 if [[ ! -s /run/network/ifstate ]]; then
-	if [[ $internet = 1 ]]; then 
-		printStatus "Netplan is in use and will be removed; reverted to ifupdown for networking."
-		checkNetplan
-		printGood "Netplan was removed."
+	printError "Netplan (network manager) is in use...unfortunately, netplan is NOT compatible with setips.sh"
+	echo "You may continue to use netplan at your own risk or revert to ifupdown (setips.sh compatible network manager)"
+	echo "Do you want to revert to ifupdown? (y/N) "; read REPLY
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		if [[ $internet = 1 ]]; then 
+			printStatus "Netplan is in use and will be removed; reverted to ifupdown for networking."
+			checkNetplan
+			printGood "Netplan was removed."
+		else
+			printError "You must be connected to the internet to remove netplan.io; connect to the internet and try again."
+			break
+		fi
 	else
-		printError "You must be connected to the internet to remove netplan.io; connect to the internet and try again."
 		break
 	fi
-else
-	printGood "Netplan is not in use."
 fi
 
 # Ask to run interface setup or, if setup, collect information
