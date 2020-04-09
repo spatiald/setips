@@ -2157,7 +2157,7 @@ checkSSH
 
 # Check if netplan.io is being used
 if [[ ! -s /run/network/ifstate ]]; then
-	printError "Netplan (network manager) is in use...unfortunately, netplan is NOT compatible with setips.sh"
+	echo; printError "Netplan (network manager) is in use...unfortunately, netplan is NOT compatible with setips.sh"
 	echo "You may continue to use netplan at your own risk or revert to ifupdown (setips.sh compatible network manager)"
 	echo "Do you want to revert to ifupdown? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
