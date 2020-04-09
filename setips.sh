@@ -1058,19 +1058,16 @@ checkSSH(){
 
 # Check for and (if exists) disable netplan.io
 checkNetplan(){
-	if [[ ! -s /run/network/ifstate ]]; then
-		apt update; apt install ifupdown
-		ifdown --force enp0s3 lo && ifup -a
-		systemctl unmask networking
-		systemctl enable networking
-		systemctl restart networking
-		systemctl stop systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
-		systemctl disable systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
-		systemctl mask systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
-		apt-get --assume-yes purge nplan netplan.io
-		ifup enp0s3
-		printGood "Netplan is in use and will be removed; reverted to ifupdown for networking."
-	fi
+	apt update; apt install ifupdown
+	ifdown --force enp0s3 lo && ifup -a
+	systemctl unmask networking
+	systemctl enable networking
+	systemctl restart networking
+	systemctl stop systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
+	systemctl disable systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
+	systemctl mask systemd-networkd.socket systemd-networkd networkd-dispatcher systemd-networkd-wait-online
+	apt-get --assume-yes purge nplan netplan.io
+	ifup enp0s3
 }
 
 # Create systemd unit file for starting SOCKS proxy
@@ -2157,6 +2154,20 @@ fi
 
 # Checking ssh service is turned on and enabled for password login (Added for Don *grin*)
 checkSSH
+
+# Check if netplan.io is being used
+printStatus "Checking if netplan.io is used for managing your network."
+if [[ ! -s /run/network/ifstate ]]; then
+	if [[ $internet = 1 ]]; then 
+		printStatus "Netplan is in use and will be removed; reverted to ifupdown for networking."
+		checkNetplan
+		printGood "Netplan was removed."
+	else
+		printError "You must be connected to the internet to remove netplan.io; connect to the internet and try again."
+		break
+else
+	printGood "Netplan is not in use."
+fi
 
 # Ask to run interface setup or, if setup, collect information
 if [[ ! -f $setipsFolder/subnet.current || ! -f $setipsFolder/mtu.current ]]; then
