@@ -2165,6 +2165,7 @@ if [[ ! -s /run/network/ifstate ]]; then
 	else
 		printError "You must be connected to the internet to remove netplan.io; connect to the internet and try again."
 		break
+	fi
 else
 	printGood "Netplan is not in use."
 fi
