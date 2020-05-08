@@ -22,7 +22,7 @@
 # - powersploit.zip
 # - veil.zip
 
-scriptVersion=3.0e
+scriptVersion=3.0g
 
 # CHANGE THESE for every exercise (if needed)
 _defaultMTU=1500 # IO Range requires 1300, normal networks are 1500
@@ -33,7 +33,7 @@ _redteamShare="" #e.g. 192.168.1.1 or share.com/remote.php/webdav/software where
 _redteamShareUser="opfor" # Redteam share user
 ## setips.sh script IP info and user
 _redteamGogsAuth="0" # "0"=No user auth, "1"=Use user auth
-_redteamGogs="10.30.192.2" # Redteam Gogs (Github) address
+_redteamGogs="192.168.1.1" # Redteam Gogs (Github) address
 ## Software locations
 _cobaltstrikeDir="/redteam/exploitation/cobaltstrike" # Cobaltstrike folder
 _c2profilesDir="/redteam/git-pulls/Malleable-C2-Profiles" # Cobaltstrike C2 Profiles folder
@@ -48,7 +48,7 @@ setipsGitFolder="$HOME/setips" # Cloned Gogs repo for setips
 configFile="$setipsFolder/setips.conf"
 defaultMTU="$_defaultMTU" # Normal is 1500; exercises are typically 1280 or 900
 internet="$_internet" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
-downloadSoftware="1" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
+downloadSoftware="" # "O"=Do not download offline software, "1"=Always download, ""=(ie Blank) Force ask
 localSoftwareDirPath="/root"
 localsoftwareDirName="software"
 localSoftwareDir="$localSoftwareDirPath/$localsoftwareDirName" # Location where you want your downloaded software located
@@ -165,6 +165,24 @@ printQuestion(){
 testingScript(){
 	set -x
 	# Add functions here
+	
+	tmp=/tmp/iptables.tmp
+	iplist="./ips.list"
+	# List subinterface ips randomly and put into file called "intips"
+	listSubIntIPsOnly | shuf > $iplist
+	# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
+	iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
+	# Identify the number of assigned subinterfaces
+	ipcount=`wc -l $iplist | cut -f 1 -d " "`
+	while read p; do
+		iptables -t nat -A POSTROUTING -m statistic --mode nth --every $ipcount --packet 0 -j SNAT --to-source $p
+		ipcount=$(($ipcount-1))
+	done <$iplist
+	rm $iplist
+	# Setup forward rule, if there isn't one
+	iptables-save > $tmp; sed -i "/-A FORWARD -j ACCEPT/d" $tmp; iptables-restore < $tmp; rm $tmp	
+	$iptables -t filter -I FORWARD 1 -j ACCEPT
+
 	exit 1
 }
 
@@ -1057,7 +1075,7 @@ checkSSH(){
 }
 
 # Check for and (if exists) disable netplan.io
-checkNetplan(){
+removeNetplan(){
 	apt update; apt install ifupdown
 	ifdown --force enp0s3 lo && ifup -a
 	systemctl unmask networking
@@ -1149,11 +1167,11 @@ setupStaticIP(){
 	if [[ $(cat /etc/network/interfaces|grep setips.sh) ]] && [[ $(cat /etc/network/interfaces|grep "# $ethInt START") ]]; then
 		echo; printQuestion "You have already setup a static IP with this script; do you want to continue? (y/N)"; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			checkNetplan
+			removeNetplan
 			configureStaticIP
 		fi
 	else
-		checkNetplan
+		removeNetplan
 		configureStaticIP
 	fi
 }
@@ -1280,10 +1298,12 @@ iptablesToggleRandomSource(){
 	if [[ $randomIPs == 1 ]]; then 
 		# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
 		iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
-		echo; printGood "Turned OFF outgoing source IP randomization."
+		echo; printGood "Turned ** OFF ** outgoing source IP randomization."
 	else
 		# Randomize source IPs on all outgoing packets
-		randomizePivotIP
+		randomizePivotIP	
+		# Save off current iptables, delete all masquerade rules, and restore the table
+		iptables-save > $tmp; sed -i "/MASQERADE/d" $tmp; iptables-restore < $tmp; rm $tmp	
 		echo; printGood "Turned ** ON ** outgoing source IP randomization."
 	fi
 }
@@ -1658,6 +1678,7 @@ EOF
 cleanIPTables(){
 	tmp=`mktemp`
 	tmp2=`mktemp`
+	tmp3=`mktemp`
 	tmpDNAT=`mktemp`
 	# Clean duplicate items that are next to each other; enable ipv4/ipv6 forwarding; remove old MASQUERADE method of "proxying"
 	# older forwarding technique
@@ -1679,8 +1700,13 @@ cleanIPTables(){
 	# Add back in the cleaned DNAT rules; order doesn't matter
 	while read p; do $iptables -t nat $p; done < $tmpDNAT
 	rm $tmp $tmpDNAT
-	$iptables -t nat -A POSTROUTING -p tcp -j MASQUERADE
-	$iptables -t nat -A POSTROUTING -p udp -j MASQUERADE
+	# Clean masquerade rules (if applicable)
+	if [[ $(iptables-save | grep "statistic") ]]; then
+		iptables-save > $tmp3; sed -i "/MASQUERADE/d" $tmp3; iptables-restore < $tmp3; rm $tmp3
+	else
+		$iptables -t nat -A POSTROUTING -p tcp -j MASQUERADE
+		$iptables -t nat -A POSTROUTING -p udp -j MASQUERADE
+	fi
 }
 
 # Save IPTables for historical purposes
@@ -1800,7 +1826,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				setupIPTablesRedirectorIPs
 				autoSetIPsOnStart
 				cleanIPTables
-				iptables-save |grep -v statistic | iptables-restore
+				#iptables-save |grep -v statistic | iptables-restore
 				savePivotRules
 				saveIPTables
 				break
@@ -1825,7 +1851,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				echo; displayIPTables
 				setupIPTablesPivot
 				cleanIPTables
-				iptables-save |grep -v statistic | iptables-restore
+				#iptables-save |grep -v statistic | iptables-restore
 				saveIPTables
 				break
 				;;
@@ -1868,6 +1894,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				whatInterface
 				addSubInts
 				autoSetIPsOnStart
+				autoStartIPTables
 				break
 				;;
 
@@ -1949,6 +1976,9 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 				IPTables-toggle-random-source-IPs )
 				iptablesToggleRandomSource
+				cleanIPTables
+				saveIPTables
+				autoStartIPTables
 				break
 				;;
 
@@ -2163,10 +2193,10 @@ if [[ ! -s /run/network/ifstate ]]; then
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		if [[ $internet = 1 ]]; then 
 			printStatus "Netplan is in use and will be removed; reverted to ifupdown for networking."
-			checkNetplan
+			removeNetplan
 			printGood "Netplan was removed."
 		else
-			printError "You must be connected to the internet to remove netplan.io; connect to the internet and try again."
+			printError "You must be connected to the internet to remove netplan.io (you are currently in OFFLINE mode; change to ONLINE mode in the 'Utilities' menu. "
 			break
 		fi
 	else
@@ -2293,7 +2323,7 @@ else
 			setupIPTablesRedirectorIPs
 			autoSetIPsOnStart
 			cleanIPTables
-			iptables-save |grep -v statistic | iptables-restore
+			#iptables-save |grep -v statistic | iptables-restore
 			savePivotRules
 			saveIPTables
 			printGood "Setup complete."
@@ -2303,7 +2333,7 @@ else
 			printGood "Saving backup of your IPTables before repair attempt to $iptablesBackup/$iptablesBackupFile"
 			iptables-save > $iptablesBackup/$iptablesBackupFile
 			cleanIPTables >&2
-			iptables-save |grep -v statistic | iptables-restore
+			#iptables-save | grep -v statistic | iptables-restore
 			autoStartIPTables >&2
 			autoSetIPsOnStart >&2
 			saveIPTables >&2
