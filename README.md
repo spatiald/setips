@@ -2,20 +2,21 @@
 
 NOTE: COPY/PASTE BOTH LINES into your CAP shell/console
 
+## OFFLINE
 ```bash
-wget https://raw.githubusercontent.com/spatiald/setips/master/setips.sh \
--O /root/setips.sh; chmod +x setips.sh; /root/setips.sh
+wget http://10.2.2.4:3000/spatiald/setips/raw/master/setips.sh -O /root/setips.sh; \
+chmod +x setips.sh; /root/setips.sh
 ```
 
-## Howto
+## ONLINE
+[If required] Install git:
+```bash
+apt update; apt -y install git
+```
+
 Use git to clone the repository.  For Linux:
 ```bash
 git clone https://github.com/spatiald/setips.git
-```
-
-If you need git installed, run:
-```bash
-apt-get update; apt-get -y install git
 ```
 
 Once the ```setips``` folder downloads, you can update by changing into the setips directory and type:
@@ -29,25 +30,19 @@ chmod +x setips.sh
 ```
 Recommend running the script in interactive mode first to learn it's capabilities:
 ```bash
-./setips.sh -i
+./setips.sh
 ```
 Some commands are capable of running as running as oneliners from the command line.  See ```Usage``` and ```Examples``` below. 
 
 ## Usage
 ```
-Usage: [-h] [-i] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
-       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
-       [-u] [-x <victim IP> <# of threads>] [-z]
+Usage: [-h] [-l] [-r] [-a <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] 
+       [-f <fileName>] [-d <protocol> <subintip> <subintport> <tgtIP> <tgtPort>] [-u]
 ```
 #### Examples:
 Displays this help menu.
 ```bash
 ./setips.sh -h
-```
-
-Interactive mode.
-```bash
-./setips.sh -i
 ```
 
 List current IPTables rules.
@@ -79,16 +74,6 @@ File Format, one entry per line:  <tcp or udp> <pivot-subinterface-IP> <pivot-su
 Update setips.sh scripts with RELEASE version from the Redteam wiki.
 ```bash
 ./setips -u
-```
-
-Update setips.sh scripts with BETA version from the Redteam wiki.
-```bash
-./setips -z
-```
-
-Inundator - Setup subinterfaces (if necessary), run inudator to blind snort sensors but send all the default snort rules across their sensors.
-```bash
-./setips.sh -x <target-IP> <#-of-threads>
 ```
 
 ## Troubleshooting

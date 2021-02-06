@@ -1,6 +1,14 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.1 (2021Feb06-1017)'
+- CyberX2021 Version
+- Massive clean and update to support netplan structure/ip commands
+- Removed unused modules (dual-gateways; autoSetIPsOnStart; installRecommendedTools)
+
+Version: '3.0d (2020Apr15-1200)'
+- CyberX2020 Version
+
 Version: '3.0c (2018May13-1646)'
 - Cyber Guard 2018 Version
 - Updated sshfix script to run on setips script run and use systemd commands (enables ssh service and allows passwords)
