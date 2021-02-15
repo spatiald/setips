@@ -308,15 +308,15 @@ listCoreIP(){
 
 # Ask which ethernet port you want to create subinterfaces for
 whatInterface(){
-	# stty sane
-	# ints=$(ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | grep -v "127.0.0.1/8" | awk '{ print $2 }')
+	#stty sane
+#	ints=$(ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | grep -v "127.0.0.1/8" | awk '{ print $2 }')
 	ints=$(ip address show | grep state | grep -v LOOPBACK | awk '{ print $2 }' | cut -d: -f1)
 	echo; printQuestion "What ethernet interface?"
 	select int in $ints; do 
 		export ethInt=$int
 		break
 	done
-	# exec &> >(tee -a "$setipsFolder/setips.log")
+	exec &> >(tee -a "$setipsFolder/setips.log")
 }
 
 # List IPs, single line, comma-seperated
@@ -587,14 +587,7 @@ restoreSubIntsFile(){
 setIP(){
 	# IP
 	REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
-	## Need to check that this works
-	ipInts=$(listCoreInterfaces)
-	echo; printQuestion "What ethernet interface do you want to setup?"
-	select line in $ipInts; do 
-		export IP=$(echo $line | cut -f1 -d' ')
-		break
-	done	
-	# IP=$(ip a | grep inet | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
+	IP=$(ip a | grep inet | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
 	staticIPLoop(){
 		until [[ $valid_ip == 1 ]]
 		do
@@ -613,7 +606,7 @@ setIP(){
 	if [[ -z $IP ]]; then
 		staticIPLoop
 	else
-		echo; printStatus "The current IP on this server is:  $ethInt - $IP"
+		echo; printStatus "The current IP on this server is:  $IP"
 		printQuestion "Would you like to set the current IP as the primary static IP on the server? (Y/n)"; read REPLY
 		if [[ $REPLY =~ ^[Nn]$ ]]; then
 			staticIPLoop
@@ -664,7 +657,7 @@ setDNS(){
 # Set MTU
 setMTU(){
 	# valid MTU
-	currentMTU="$( ip a |grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' | sort -u )"
+	currentMTU="$( ip a |grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
 	echo; printStatus "Current MTU:  $currentMTU"
 	echo; printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
