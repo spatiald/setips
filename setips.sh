@@ -8,11 +8,11 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.1
+scriptVersion=3.1b
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
-	printError "Superuser (i.e. root) privileges are required to run this script."
+	echo "Superuser (i.e. root) privileges are required to run this script."
 	exit 1
 fi
 
@@ -192,7 +192,7 @@ checkInternet(){
 	if [[ $internet == "1" || -z $internet ]]; then
 		# Check internet connecivity
 		WGET=`which wget`
-		$WGET -q --tries=10 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
+		$WGET -q --tries=5 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
 		if [[ $? -eq 0 ]]; then
 			printGood "Internet connection confirmed...continuing."
 			internet=1
@@ -222,36 +222,50 @@ commandStatus(){
 }
 
 firstTime(){
-	# Collect missing information
-	echo; printStatus "Executing first time setup script."
+	echo; printStatus "Running initial setup \"firstTime\" script"
 
 	# Set a root password, if needed
-	echo; printStatus "We need to set a password on the root user. If you already have one set, please select 'N'"
-	printQuestion "Do you want to set a password on the root user? (Y/n)"; read REPLY
+	echo; echo "[---------  ROOT PASSWORD  ---------]"
+	printStatus "We need to set a password on the root user. If you already have one set, please select 'N'"
+	printQuestion "Do you want to set/change root's password? (Y/n)"; read REPLY
 	if [[ $REPLY =~ ^[Nn]$ ]]; then
-		echo; printStatus "We will NOT change the root password."
+		printGood "We will NOT change the root password."
 	else 
 		passwd
 	fi
 
 	# Update netplan config to setips naming
 	if [[ ! -f $netplanConfig ]]; then
+		echo; echo "[---------  NETPLAN  ---------]"
 		mkdir -p $setipsFolder/netplan.backups
 		cd /etc/netplan
 		for file in *.yaml; do
-			echo; printStatus "Backing up all current network yaml scripts to $setipsFolder/netplan.backups folder."
+			printStatus "Backing up all current network yaml scripts to $setipsFolder/netplan.backups folder."
 			mv -nv -- "$file" "$setipsFolder/netplan.backups/$file.$(date +"%Y-%m-%d_%H-%M-%S")" > /dev/null 2>&1
 		done
 	fi
 
+	# Change hostname [optional]
+	echo; echo "[---------  HOSTNAME  ---------]"
+	echo; hostnamectl
+	echo; printQuestion "Do you want to change the hostname of this server? (Y/n)"; read REPLY
+	if [[ $REPLY =~ ^[Nn]$ ]]; then
+		printGood "Hostname NOT changed."
+	else 
+		printQuestion "What name would you like to set for this server?"; read REPLY
+		hostnamectl set-hostname $REPLY
+		sed -i '0,/127\.0\.1\.1/s|127\.0\.1\.1.*|127\.0\.1\.1 '$(echo $REPLY)'|' /etc/hosts
+		printGood "Hostname changed to \"$REPLY\" - reboot to see changes."
+	fi
+
 	# Identify ethernet interface
-	ethInt="$(ip l show | grep ^2: | cut -f2 -d':' | sed 's/^ *//g')"
+	whatInterface
+	# ethInt="$(ip l show | grep ^2: | cut -f2 -d':' | sed 's/^ *//g')"
 
 	# Setup static IP
 	setupStaticIP
 
-	# # Backup iptables
-	# saveIPTables
+	echo; printGood "Initial setup \"firstTime\" script complete."
 }
 
 # Pull core interface info into variables
@@ -585,14 +599,14 @@ restoreSubIntsFile(){
 
 # Set IP
 setIP(){
-	# IP
+	echo; echo "[---------  IP  ---------]"
 	REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
-	IP=$(ip a | grep inet | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
+	IP=$(ip a | grep inet | grep $ethInt | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
 	staticIPLoop(){
 		until [[ $valid_ip == 1 ]]
 		do
 			valid_ip=0
-			echo; printQuestion "What would you like to set as your primary static IP/CIDR (i.e. 192.168.1.1/24)? "; read IP
+			printQuestion "What would you like to set as your primary static IP/CIDR (i.e. 192.168.1.1/24)? "; read IP
 			if [[ "$IP" =~ $REGEX ]]; then
 			        printGood "Valid IP: $IP"
 			        valid_ip=1
@@ -602,11 +616,11 @@ setIP(){
 			fi
 		done
 	}
-	echo; printStatus "Configuring a static IP on the server."
+	printStatus "Configuring a static IP on the server."
 	if [[ -z $IP ]]; then
 		staticIPLoop
 	else
-		echo; printStatus "The current IP on this server is:  $IP"
+		echo "The current IP on this server is:  $IP"
 		printQuestion "Would you like to set the current IP as the primary static IP on the server? (Y/n)"; read REPLY
 		if [[ $REPLY =~ ^[Nn]$ ]]; then
 			staticIPLoop
@@ -618,20 +632,21 @@ setIP(){
 
 # Set default gateway
 setGateway(){
-	echo; printStatus "Current route table:"
-	ip route
+	echo; echo "[---------  GATEWAY  ---------]"
+	printStatus "Current route table:"
+	ip route; echo
 	currentgw="$( getInternetInfo 3 )"
 	if [[ -z ${currentgw:+x} ]]; then
-		echo; printError "You do not have a default gateway set."
+		printError "You do not have a default gateway set."
 	else
-		echo; printStatus "Your current gateway is:  $currentgw"
+		echo "Your primary gateway is:  $currentgw"
 	fi
-	echo; printQuestion "Do you want to update your gateway? (y/N) "; read REPLY
+	printQuestion "Do you want to update your gateway? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		echo; printQuestion "What is the IP of the gateway?"; read currentgw || return
-		echo; printGood "Your gateway was updated to:  $currentgw"; echo
+		printQuestion "What is the IP of the gateway?"; read currentgw
+		printGood "Your gateway was updated to:  $currentgw"
 	else
-		echo; printError "Gateway not changed."
+		printError "Gateway not changed."
 	fi
 	sed -i "/^GATEWAY=/c\GATEWAY=\"$currentgw\"" $setipsConfig
 	sed -i "s|gateway4:.*|gateway4: $currentgw|;" $netplanConfig
@@ -639,16 +654,16 @@ setGateway(){
 
 # Set DNS
 setDNS(){
-	# valid DNS IP
+	echo; echo "[---------  DNS  ---------]"
 	if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then systemctl enable systemd-resolved.service > /dev/null; fi
 	dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
-	echo; printStatus "Your current DNS server(s):  $dnsips"
-	echo; printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
+	printStatus "Your current DNS server(s):  $dnsips"
+	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		echo; printQuestion "What are the DNS server IPs (comma separated)?"; read dnsips || return
-		echo; printGood "Your DNS settings were updated."
+		printQuestion "What are the DNS server IPs (comma separated)?"; read dnsips
+		printGood "Your DNS settings were updated."
 	else
-		echo; printError "DNS not changed."
+		printError "DNS not changed."
 	fi
 		sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
 		sed -i '/.*nameservers:/!b;n;c\                addresses: ['$dnsips']' $netplanConfig
@@ -656,12 +671,12 @@ setDNS(){
 
 # Set MTU
 setMTU(){
-	# valid MTU
+	echo; echo "[---------  MTU  ---------]"
 	currentMTU="$( ip a |grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
 	echo; printStatus "Current MTU:  $currentMTU"
-	echo; printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
+	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		echo; printQuestion "What is your desired MTU setting (default is $MTU)?"; read MTU
+		printQuestion "What is your desired MTU setting (default is $MTU)?"; read MTU
 		if [[ -z ${MTU:+x} ]]; then MTU=1500; fi
 		printGood "Setting MTU of $MTU."
 	else
@@ -1643,6 +1658,9 @@ else
 			autoStartIPTables >&2
 			saveIPTables >&2
 			printGood "Repair complete, saving IPTables backup...run './setips.sh -l' to view current IPTables."
+			;;
+		(s) # Rerun firstTime setup script
+			firstTime >&2
 			;;
 		(t) # Testing script
 			testingScript >&2
