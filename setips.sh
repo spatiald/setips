@@ -119,9 +119,7 @@ printQuestion(){
 
 # Test function
 testingScript(){
-	removeSubInts
-	addSubInts
-
+	$2
 	exit 1
 }
 
@@ -246,17 +244,7 @@ firstTime(){
 	fi
 
 	# Change hostname [optional]
-	echo; echo "[---------  HOSTNAME  ---------]"
-	echo; hostnamectl
-	echo; printQuestion "Do you want to change the hostname of this server? (Y/n)"; read REPLY
-	if [[ $REPLY =~ ^[Nn]$ ]]; then
-		printGood "Hostname NOT changed."
-	else 
-		printQuestion "What name would you like to set for this server?"; read REPLY
-		hostnamectl set-hostname $REPLY
-		sed -i '0,/127\.0\.1\.1/s|127\.0\.1\.1.*|127\.0\.1\.1 '$(echo $REPLY)'|' /etc/hosts
-		printGood "Hostname changed to \"$REPLY\" - reboot to see changes."
-	fi
+	setHostname
 
 	# Identify ethernet interface
 	whatInterface
@@ -328,6 +316,7 @@ whatInterface(){
 	echo; printQuestion "What ethernet interface?"
 	select int in $ints; do 
 		export ethInt=$int
+		sed -i "/^ethInt=/c\ethInt=\"$int\"" $setipsConfig
 		break
 	done
 	exec &> >(tee -a "$setipsFolder/setips.log")
@@ -597,6 +586,21 @@ restoreSubIntsFile(){
 	sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $savefile)']|' $netplanConfig
 }
 
+# Change hostname [optional]
+setHostname(){
+	echo; echo "[---------  HOSTNAME  ---------]"
+	echo; hostnamectl
+	echo; printQuestion "Do you want to change the hostname of this server? (Y/n)"; read REPLY
+	if [[ $REPLY =~ ^[Nn]$ ]]; then
+		printGood "Hostname NOT changed."
+	else 
+		printQuestion "What name would you like to set for this server?"; read REPLY
+		hostnamectl set-hostname $REPLY
+		sed -i '0,/127\.0\.1\.1/s|127\.0\.1\.1.*|127\.0\.1\.1 '$(echo $REPLY)'|' /etc/hosts
+		printGood "Hostname changed to \"$REPLY\" - reboot to see changes."
+	fi
+}
+
 # Set IP
 setIP(){
 	echo; echo "[---------  IP  ---------]"
@@ -845,6 +849,7 @@ stopSOCKS(){
 
 # Flush all current IPTable rules
 flushIPTables(){
+	tmp=`mktemp`
 	# Flushing all rules
 	$iptables -F
 	$iptables -X
