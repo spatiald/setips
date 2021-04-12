@@ -1361,7 +1361,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Gateway" "Set-DNS" "Set-MTU" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
+		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
 			case $ut in
 				Install-Redirector-Tools )
 				if [[ $internet = 1 ]]; then echo; installRedirTools; else printError "Need to be online to download/install required redirector tools." ; fi
@@ -1382,6 +1382,11 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				# Default the internet opmode
 				internet=""
 				opMode
+				break
+				;;
+
+				Set-Hostname )
+				setHostname
 				break
 				;;
 
