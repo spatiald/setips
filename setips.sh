@@ -1690,10 +1690,10 @@ else
 				if [[ ! -z $redteamGogs ]]; then
 					if [[ ! -d $setipsGitFolder ]]; then
 						cd $HOME
-						git clone http://$redteamGogs:3000/spatiald/setips.git
+						GIT_SSL_NO_VERIFY=true git clone https://$redteamGogs:3000/spatiald/setips.git
 						ln -s $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
 					else
-						cd $setipsGitFolder; git pull
+						cd $setipsGitFolder; GIT_SSL_NO_VERIFY=true git pull
 						ln -s $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
 						echo
 					fi
