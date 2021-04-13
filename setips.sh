@@ -51,7 +51,7 @@ defaultMTU="1500" # The default MTU (change only when needed)
 setipsFolder="$HOME/setips-files" # Main setips data folder
 setipsGitFolder="$HOME/setips" # Cloned Gogs repo for setips
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
-redteamGogs="1.2.3.4" # Redteam wiki full web address
+redteamGogs="" # Redteam wiki full web address
 EOF
 }
 
@@ -1675,7 +1675,7 @@ else
 				cd /root/setips
 				git checkout master
 				commandStatus
-				ln -s $HOME/setips/setips.sh $HOME/setips.sh
+				ln -sf $HOME/setips/setips.sh $HOME/setips.sh
 				chmod +x /root/setips/setips.sh
 				if [[ -f /root/setips.sh ]]; then echo; printGood "setips.sh downloaded to /root/setips.sh"; fi
 			else
@@ -1684,14 +1684,16 @@ else
 					if [[ ! -d $setipsGitFolder ]]; then
 						cd $HOME
 						GIT_SSL_NO_VERIFY=true git clone https://$redteamGogs:3000/spatiald/setips.git
-						ln -s $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
+						ln -sf $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
 					else
 						cd $setipsGitFolder; GIT_SSL_NO_VERIFY=true git pull
-						ln -s $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
+						ln -sf $setipsGitFolder/setips.sh $HOME/setips.sh > /dev/null 2>&1
 						echo
 					fi
 				else
-					printError "You do not have an IP set for the Gogs (Github) server."
+					printQuestion "What is the IP or domain for the Git (Gogs) Server? "; read REPLY
+					sed -i "/^redteamGogs=/c\redteamGogs=\"$REPLY\"" $setipsConfig
+					bash $0 -u
 				fi
 			fi
 			;;
