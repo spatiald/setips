@@ -868,8 +868,7 @@ flushIPTables(){
 iptablesToggleRandomSource(){
 	tmp=`mktemp`
 	# Check if current iptables is set to random source address
-	if [[ $(iptables-save | grep "SNAT") ]]; then randomIPs=1; fi
-	if [[ $randomIPs == 1 ]]; then 
+	if [[ $2 == "OFF" || $(iptables-save | grep "SNAT") ]]; then 
 		# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
 		iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
 		echo; printGood "Turned ** OFF ** outgoing source IP randomization."
@@ -877,7 +876,7 @@ iptablesToggleRandomSource(){
 		# Randomize source IPs on all outgoing packets
 		randomizePivotIP	
 		# Save off current iptables, delete all masquerade rules, and restore the table
-		iptables-save > $tmp; sed -i "/MASQERADE/d" $tmp; iptables-restore < $tmp; rm $tmp	
+		iptables-save > $tmp; sed -i "/MASQUERADE/d" $tmp; iptables-restore < $tmp; rm $tmp	
 		echo; printGood "Turned ** ON ** outgoing source IP randomization."
 	fi
 }
@@ -1287,6 +1286,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				cleanIPTables
 				saveIPTables
 				setupSOCKS
+				iptablesToggleRandomSource ON
 				break
 				;;
 
@@ -1361,7 +1361,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "IPTables-show" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-setup" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
+		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
 			case $ut in
 				Install-Redirector-Tools )
 				if [[ $internet = 1 ]]; then echo; installRedirTools; else printError "Need to be online to download/install required redirector tools." ; fi
@@ -1409,11 +1409,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				break
 				;;
 
-				IPTables-show )
-				displayIPTables
-				break
-				;;
-
 				IPTables-flush )
 				flushIPTables
 				echo; printGood "IPTables successfully flushed."
@@ -1446,14 +1441,12 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				break
 				;;
 
-				SOCKS-Proxy-setup )
-				setupSOCKS
-				echo; printGood "SSH SOCKS Proxy started."
-				break
-				;;
-
 				SOCKS-Proxy-REMOVE-ALL )
 				stopSOCKS
+				iptablesToggleRandomSource OFF
+				cleanIPTables
+				saveIPTables
+				autoStartIPTables
 				echo; printGood "SSH SOCKS Proxies stopped."
 				break
 				;;
@@ -1468,13 +1461,8 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		View-Info )
 		echo; printQuestion "What IP format do you want to view?"; echo
-		select ex in "Cobaltstrike-Teamserver" "Proxychains" "List-Current-IPs" "List-Previously-Used-IPs" "Main-Menu"; do
+		select ex in "Proxychains" "Show-Current-IPs" "Show-Previously-Used-IPs" "Show-IPTables" "Main-Menu"; do
 			case $ex in
-				Cobaltstrike-Teamserver )
-				listIPs-oneline
-				break
-				;;
-
 				Proxychains )
 				echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
 				echo; echo "Copy the following to the end of /etc/proxychains.conf"
@@ -1482,15 +1470,20 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				break
 				;;
 
-				List-Current-IPs )
+				Show-Current-IPs )
 				echo; printStatus "CHECK IT OUT -> You can find the save file here:  $ipsCurrent"
 				listIPs
 				break
 				;;
 
-				List-Previously-Used-IPs )
+				Show-Previously-Used-IPs )
 				echo; printStatus "CHECK IT OUT -> You can find the archive file here:  $ipsArchive"
 				cat $ipsArchive
+				break
+				;;
+
+				Show-IPTables )
+				displayIPTables
 				break
 				;;
 
