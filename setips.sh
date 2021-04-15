@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.1d
+scriptVersion=3.1e
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -252,6 +252,9 @@ firstTime(){
 
 	# Setup static IP
 	setupStaticIP
+
+	# Disable/stop DNS stub resolver
+	disableStubResolver
 
 	echo; printGood "Initial setup \"firstTime\" script complete."
 }
@@ -689,6 +692,14 @@ setMTU(){
 	fi
 	sed -i "/^MTU=/c\MTU=\"$MTU\"" $setipsConfig
 	sed -ri 's/(mtu:)\s+\w+/\1 '$MTU'/i' $netplanConfig
+}
+
+# Disable/stop DNS stub resolver
+disableStubResolver(){
+	echo; echo "[---------  CONFIGURE DNS STUB RESOLVER  ---------]"
+	printStatus "Disabling the local DNS stub resolver"
+	systemctl disable systemd-resolved.service
+	systemctl stop systemd-resolved
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
@@ -1361,7 +1372,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
+		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "Disable-DNS-Stub-Resolver" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
 			case $ut in
 				Install-Redirector-Tools )
 				if [[ $internet = 1 ]]; then echo; installRedirTools; else printError "Need to be online to download/install required redirector tools." ; fi
@@ -1406,6 +1417,11 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				Set-MTU )
 				setMTU
 				netplan generate; netplan apply
+				break
+				;;
+
+				Disable-DNS-Stub-Resolver )
+				disableStubResolver
 				break
 				;;
 
