@@ -1,6 +1,11 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.2 (2022Apr11-1658)'
+- CyberX2022 Version
+- Fixed masquerade changes to target specific interface
+- Fix MTU sed bug
+
 Version: '3.1 (2021Feb06-1017)'
 - CyberX2021 Version
 - Massive clean and update to support netplan structure/ip commands

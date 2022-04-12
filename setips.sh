@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.1e
+scriptVersion=3.2
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -683,14 +683,14 @@ setMTU(){
 	echo; printStatus "Current MTU:  $currentMTU"
 	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		printQuestion "What is your desired MTU setting (default is $MTU)?"; read MTU
+		printQuestion "What is your desired MTU setting (default is normally 1500)?"; read MTU
 		if [[ -z ${MTU:+x} ]]; then MTU=1500; fi
 		printGood "Setting MTU of $MTU."
 	else
 		MTU=$currentMTU
 		printError "MTU not changed."
 	fi
-	sed -i "/^MTU=/c\MTU=\"$MTU\"" $setipsConfig
+	sed -i '/^MTU=/c\MTU='$MTU'' $setipsConfig
 	sed -ri 's/(mtu:)\s+\w+/\1 '$MTU'/i' $netplanConfig
 }
 
@@ -873,7 +873,7 @@ flushIPTables(){
 	$iptables -P FORWARD ACCEPT
 
 	# Remove MASQUERADE rules
-	iptables-save > $tmp; sed -i "/MASQUERADE/d" $tmp; iptables-restore < $tmp; rm $tmp
+	iptables-save > $tmp; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp; iptables-restore < $tmp; rm $tmp
 }
 
 iptablesToggleRandomSource(){
@@ -887,7 +887,7 @@ iptablesToggleRandomSource(){
 		# Randomize source IPs on all outgoing packets
 		randomizePivotIP	
 		# Save off current iptables, delete all masquerade rules, and restore the table
-		iptables-save > $tmp; sed -i "/MASQUERADE/d" $tmp; iptables-restore < $tmp; rm $tmp	
+		iptables-save > $tmp; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp; iptables-restore < $tmp; rm $tmp	
 		echo; printGood "Turned ** ON ** outgoing source IP randomization."
 	fi
 }
@@ -933,7 +933,7 @@ flushIPTablesPivotRules(){
 		while :; do
 			if [[ $REPLY =~ ^[Yy]$ ]]; then
 				iptables-save > iptables.tmp
-				sed -i '/DNAT/d' -i "/MASQUERADE/d" iptables.tmp
+				sed -i '/DNAT/d' -i '/-o '$ethInt' -j MASQUERADE/ {d;}' iptables.tmp
 				iptables-restore < iptables.tmp
 				rm iptables.tmp
 				break
@@ -1175,7 +1175,7 @@ cleanIPTables(){
 	sed -i '/net.ipv6.conf.all.forwarding=1/s/^#//g' /etc/sysctl.conf
 	sysctl -p > /dev/null 2>&1
 	sysctl --system > /dev/null 2>&1
-	iptables-save | uniq > $tmp; sed -i "/MASQUERADE/d" $tmp
+	iptables-save | uniq > $tmp; sed -i '/-o '$ehtInt' -j MASQUERADE/ {d;}' $tmp
 	# Clean duplicate items NOT next to each other; save off DNAT list to tmp.snat then remove all DNAT entries for tmp iptables file
 	cat $tmp | grep "DNAT" | sort -u > $tmpDNAT; sed -i "/DNAT/d" $tmp
 	# Have to add "--packet 0" back into before restoring on certain version of iptables
@@ -1189,7 +1189,7 @@ cleanIPTables(){
 	rm $tmp $tmpDNAT
 	# Clean masquerade rules (if applicable)
 	if [[ $(iptables-save | grep -E 'statistic') ]]; then
-		iptables-save > $tmp3; sed -i "/MASQUERADE/d" $tmp3; iptables-restore < $tmp3; rm $tmp3
+		iptables-save > $tmp3; sed -i '/-o '$ehtInt' -j MASQUERADE/ {d;}' $tmp3; iptables-restore < $tmp3; rm $tmp3
 	else
 		$iptables -t nat -A POSTROUTING -o $ethInt -j MASQUERADE
 	fi
