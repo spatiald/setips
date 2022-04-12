@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.2
+scriptVersion=3.2b
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
