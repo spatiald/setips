@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.2c
+scriptVersion=3.2d
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -1168,6 +1168,7 @@ cleanIPTables(){
 	tmp=`mktemp`
 	tmp2=`mktemp`
 	tmp3=`mktemp`
+	tmpSNAT=`mktemp`
 	tmpDNAT=`mktemp`
 	# Clean duplicate items that are next to each other; enable ipv4/ipv6 forwarding; remove old MASQUERADE method of "proxying"
 	# older forwarding technique
@@ -1177,9 +1178,11 @@ cleanIPTables(){
 	sed -i '/net.ipv6.conf.all.forwarding=1/s/^#//g' /etc/sysctl.conf
 	sysctl -p > /dev/null 2>&1
 	sysctl --system > /dev/null 2>&1
-	iptables-save | uniq > $tmp; sed -i '/-o '$ehtInt' -j MASQUERADE/ {d;}' $tmp
-	# Clean duplicate items NOT next to each other; save off DNAT list to tmp.snat then remove all DNAT entries for tmp iptables file
+	iptables-save | uniq > $tmp; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp
+	# DNAT - Clean duplicate items NOT next to each other; save off DNAT list to tmp.nat then remove all DNAT entries for tmp iptables file
 	cat $tmp | grep "DNAT" | sort -u > $tmpDNAT; sed -i "/DNAT/d" $tmp
+	# SNAT - Clean duplicate items NOT next to each other; save off SNAT list to tmp.nat then remove all DNAT entries for tmp iptables file
+	cat $tmp | grep "SNAT" | sort -u > $tmpSNAT; sed -i "/SNAT/d" $tmp
 	# Have to add "--packet 0" back into before restoring on certain version of iptables
 	if [[ ! `grep "packet" $tmp` ]]; then
 		awk 'BEGIN{OFS=FS=" "} $4~/statistic/ {$9="--packet 0 -j";}1' $tmp > $tmp2; mv $tmp2 $tmp
@@ -1187,11 +1190,12 @@ cleanIPTables(){
 	# Restore the cleaned rules
 	iptables-restore < $tmp
 	# Add back in the cleaned DNAT rules; order doesn't matter
+	while read p; do $iptables -t nat $p; done < $tmpSNAT
 	while read p; do $iptables -t nat $p; done < $tmpDNAT
-	rm $tmp $tmpDNAT
+	rm $tmp $tmpDNAT $tmpSNAT
 	# Clean masquerade rules (if applicable)
 	if [[ $(iptables-save | grep -E 'statistic') ]]; then
-		iptables-save > $tmp3; sed -i '/-o '$ehtInt' -j MASQUERADE/ {d;}' $tmp3; iptables-restore < $tmp3; rm $tmp3
+		iptables-save > $tmp3; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp3; iptables-restore < $tmp3; rm $tmp3
 	else
 		$iptables -t nat -A POSTROUTING -o $ethInt -j MASQUERADE
 	fi
@@ -1565,12 +1569,12 @@ elif [[ $1 == "" ]]; then
 	interactiveMode
 else
 	IAM=${0##*/} # Short basename
-	while getopts ":a:d:f:hilnrstu" opt
+	while getopts ":a:d:f:hilno:rstu" opt
 	do sc=0 #no option or 1 option arguments
 		case $opt in
 		(a) # IMPORT - Quick entry to iptables src nat
 			if [[ $# -lt $((OPTIND + 1)) ]]; then
-				ec!ho "$IAM: Option -s argument(s) missing...needs five!" >&2
+				echo; echo "$IAM: Option -s argument(s) missing...needs five!" >&2
 				echo; printHelp >&2
 				exit 2
 			fi
@@ -1593,7 +1597,7 @@ else
 			;;
 		(d) # DELETE - Quick delete iptables rule
 			if [[ $# -lt $((OPTIND + 1)) ]]; then
-				echo "$IAM: Option -d argument(s) missing...needs five!" >&2
+				echo; echo "$IAM: Option -d argument(s) missing...needs five!" >&2
 				echo; printHelp >&2
 				exit 2
 			fi
@@ -1657,17 +1661,37 @@ else
 			echo; printStatus "Setting up this server as a setips redirector."
 			# Install redirector tools
 			echo; printStatus "*IMPORTANT* For redirectors, there are several tools we need to install."
-			if [[ $internet == "1" ]]; then
-				installRedirTools
-				echo; printGood "Setup complete."
-				# Remove the setupComplete flag to force the firstTime script to run on next start
-				rm -f $setipsFolder/setupComplete /root/.ssh/authorized_keys > /dev/null 2>&1
-				echo "" > $setipsFolder/setips.log
-			else
-				echo; printError "You can not setup this redirector unless you are online."
-				echo; printError "Exiting."
-				exit 1
+			if [[ $internet == "0" ]]; then
+				echo; printError "You can not setup this redirector unless you can access a repo."
+				echo; printQuestion "Would you like the try anyway? (Y/n)"; read REPLY
+				if [[ $REPLY =~ ^[Nn]$ ]]; then
+					echo; printError "Exiting."
+					exit 1
+				fi
 			fi
+			installRedirTools
+			echo; printGood "Setup complete."
+			# Remove the setupComplete flag to force the firstTime script to run on next start
+			rm -f $setipsFolder/setupComplete /root/.ssh/authorized_keys > /dev/null 2>&1
+			echo "" > $setipsFolder/setips.log
+			;;
+		(o) # IMPORT - Setup 1:1 redirector
+			if [[ $# -lt $((OPTIND)) ]]; then
+				echo; echo "$IAM: Option -s argument(s) missing...needs two!" >&2
+				echo; printHelp >&2
+				exit 2
+			fi
+			subintip=$OPTARG
+			eval tgtip=\$$OPTIND
+			
+			# Adding 1:1 IP redirection
+			$iptables -t nat -A PREROUTING -d $subintip -j DNAT --to-destination $tgtip
+			$iptables -t nat -A POSTROUTING -s $tgtip -j SNAT --to-source $subintip
+			printGood "Imported rule specified."
+			cleanIPTables >&2
+			saveIPTables >&2
+			echo
+			sc=1 #2 args
 			;;
 		(r) # REPAIR - quick repair; doesn't hurt if run multiple times.
 			printGood "Cleaning up/repair the current IPTables ruleset."
