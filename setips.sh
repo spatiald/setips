@@ -1095,7 +1095,7 @@ installRedirTools(){
 	apt-get update
 	apt-get -y autoremove
 	echo; printStatus "Attempting to install:  unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php"
-	apt-get -y install unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php
+	apt-get -y install wireguard unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php
 	commandStatus
 	systemctl stop apache2
 	systemctl stop vsftpd
@@ -1551,16 +1551,15 @@ fi
 # Checking ssh service is turned on and enabled for password login (Added for Don *grin*)
 checkSSH
 
-# Ask to run interface setup or, if setup, collect information
-if [[ ! -f $setipsFolder/setupComplete ]]; then
-	firstTime
-	touch $setipsFolder/setupComplete
-fi
-
 if [[ $1 == "help" || $1 == "--help" ]]; then
 	echo; printStatus "setips.sh provides an interactive menu (-i) or arguements (see usage below)"
 	echo; printHelp
 elif [[ $1 == "" ]]; then
+	# Ask to run interface setup or, if setup, collect information
+	if [[ ! -f $setipsFolder/setupComplete ]]; then
+		firstTime
+		touch $setipsFolder/setupComplete
+	fi
 	interactiveMode
 else
 	IAM=${0##*/} # Short basename
