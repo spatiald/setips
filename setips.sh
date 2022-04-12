@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.2b
+scriptVersion=3.2c
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -679,7 +679,9 @@ setDNS(){
 # Set MTU
 setMTU(){
 	echo; echo "[---------  MTU  ---------]"
-	currentMTU="$( ip a |grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
+	listCoreInterfaces
+	whatInterface
+	currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
 	echo; printStatus "Current MTU:  $currentMTU"
 	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -690,8 +692,8 @@ setMTU(){
 		MTU=$currentMTU
 		printError "MTU not changed."
 	fi
-	sed -i '/^MTU=/c\MTU='$MTU'' $setipsConfig
-	sed -ri 's/(mtu:)\s+\w+/\1 '$MTU'/i' $netplanConfig
+	sed -i -e "/^MTU=/c\MTU=$MTU" $setipsConfig
+	sed -i -r -e 's/(mtu:)\s+\w+/\1 '$MTU'/i' $netplanConfig
 }
 
 # Disable/stop DNS stub resolver
@@ -1685,14 +1687,20 @@ else
 			;;
 		(u) # UPDATE - Update setips.sh to the latest release build.
 			if [[ $internet == 1 ]]; then
-				rm -rf /root/setips
+				mv /root/setips /root/setips.backup
 				git clone https://github.com/spatiald/setips.git
-				cd /root/setips
-				git checkout master
-				commandStatus
-				ln -sf $HOME/setips/setips.sh $HOME/setips.sh
-				chmod +x /root/setips/setips.sh
-				if [[ -f /root/setips.sh ]]; then echo; printGood "setips.sh downloaded to /root/setips.sh"; fi
+				if [[ -d $setipsGitFolder ]]; then
+					cd /root/setips
+					git checkout master
+					commandStatus
+					ln -sf $HOME/setips/setips.sh $HOME/setips.sh
+					chmod +x /root/setips/setips.sh
+					if [[ -f /root/setips.sh ]]; then echo; printGood "setips.sh downloaded to /root/setips.sh"; fi
+					rm -rf /root/setips.backup
+				else
+					printError "The git repo failed to download...restoring original folder."
+					mv /root/setips.backup /root/setips
+				fi 
 			else
 				echo; printStatus "You are currently in OFFLINE mode."
 				if [[ ! -z $redteamGogs ]]; then
