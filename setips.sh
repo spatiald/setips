@@ -1013,15 +1013,17 @@ setupAnotherRedirector(){
 			$ping -c 1 $redirIP > /dev/null
 			if [[ $? == 0 ]]; then
 				printGood "Target is alive."
-				sshBytes=$(cat /root/.ssh/id_rsa.pub | cut -d" " -f2| tail -c 6)
+				sshBytes=$(sudo cat /root/.ssh/id_rsa.pub | cut -d" " -f2| tail -c 6)
 				echo; printStatus "Here are the last 5 characters of your public key:  $sshBytes"
-				printStatus "Checking for your SSH key on the target system."
-				ssh root@$redirIP "sed -i '/UseDNS/d' /etc/ssh/sshd_config; echo 'UseDNS no' >> /etc/ssh/sshd_config; service ssh restart; grep $sshBytes /root/.ssh/authorized_keys > /dev/null"
+				echo; printStatus "Checking for your SSH key on the target system."
+				echo; printQuestion "What username do you want to log in with?"; read username
+				ssh $username@$redirIP "sudo sed -i '/UseDNS/d' /etc/ssh/sshd_config; echo \"UseDNS no\" | sudo tee -a /etc/ssh/sshd_config; sudo service ssh restart; sudo grep $sshBytes /root/.ssh/authorized_keys"
 				if [[ $? -gt 0 ]]; then
 					echo; printStatus "SSH Key not found on target system; uploading..."
-					ssh-copy-id root@$redirIP
+					publicKey=$(cat /root/.ssh/id_rsa.pub) 
+					ssh $username@$redirIP "sudo echo "$publicKey" >> authorized_keys; sudo mv authorized_keys /root/.ssh/; sudo chown root:root /root/.ssh/authorized_keys; sudo chmod 600 /root/.ssh/authorized_keys"
 				else
-					printGood "SSH key found."
+					echo; printGood "SSH key found."
 				fi
 				echo; printStatus "Uploading current setips.sh"
 				scp /root/setips.sh root@$redirIP:/root/setips.sh
