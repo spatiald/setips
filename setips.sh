@@ -37,7 +37,7 @@ createConfig(){
 # Add custom variables here and they will supercede the default ones
 
 ## NETWORK INFO
-IP="" # Secondary addresses are listed in comma-searated format "192.168.1.1/24,192.168.1.2/24"
+IP="" # Secondary addresses are listed in comma-separated format "192.168.1.1/24,192.168.1.2/24"
 GATEWAY=""
 MTU="1500" # Normal is 1500
 NAMESERVERS="" # Comma-separated format "1.1.1.1,9.9.9.9"
@@ -49,7 +49,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 netplanConfig="/etc/netplan/setips-network.yaml"
 defaultMTU="1500" # The default MTU (change only when needed)
 setipsFolder="$HOME/setips-files" # Main setips data folder
-setipsGitFolder="$HOME/setips" # Cloned Gogs repo for setips
+setipsGitFolder="$HOME/setips" # Cloned Git repo for setips
 internet="" # "0"=Offline, "1"=Online, ""=(ie Blank) Force ask
 redteamGogs="" # Redteam wiki full web address
 EOF
@@ -221,7 +221,7 @@ commandStatus(){
 
 firstTime(){
 	echo; printStatus "Running initial setup \"firstTime\" script"
-
+	runningFirstTime=1
 	# Set a root password, if needed
 	echo; echo "[---------  ROOT PASSWORD  ---------]"
 	printStatus "We need to set a password on the root user. If you already have one set, please select 'N'"
@@ -237,7 +237,7 @@ firstTime(){
 		echo; echo "[---------  NETPLAN  ---------]"
 		mkdir -p $setipsFolder/netplan.backups
 		cd /etc/netplan
-		for file in *.yaml; do
+		for file in *.yaml*; do
 			printStatus "Backing up all current network yaml scripts to $setipsFolder/netplan.backups folder."
 			mv -nv -- "$file" "$setipsFolder/netplan.backups/$file.$(date +"%Y-%m-%d_%H-%M-%S")" > /dev/null 2>&1
 		done
@@ -250,12 +250,14 @@ firstTime(){
 	whatInterface
 	# ethInt="$(ip l show | grep ^2: | cut -f2 -d':' | sed 's/^ *//g')"
 
-	# Setup static IP
-	setupStaticIP
-
 	# Disable/stop DNS stub resolver
 	disableStubResolver
 
+	# Setup static IP
+	setupStaticIP
+
+	# Apply the network plan
+	netplan generate; netplan apply
 	echo; printGood "Initial setup \"firstTime\" script complete."
 }
 
@@ -315,6 +317,7 @@ listCoreIP(){
 whatInterface(){
 	#stty sane
 #	ints=$(ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | grep -v "127.0.0.1/8" | awk '{ print $2 }')
+	listCoreInterfaces
 	ints=$(ip address show | grep state | grep -v LOOPBACK | awk '{ print $2 }' | cut -d: -f1)
 	echo; printQuestion "What ethernet interface?"
 	select int in $ints; do 
@@ -662,8 +665,9 @@ setGateway(){
 # Set DNS
 setDNS(){
 	echo; echo "[---------  DNS  ---------]"
-	if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then systemctl enable systemd-resolved.service > /dev/null; fi
-	dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
+	# if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then printStatus "Enabling DNS stub resolver temporarily."; systemctl enable systemd-resolved.service > /dev/null; fi
+	# dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
+	dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
 	printStatus "Your current DNS server(s):  $dnsips"
 	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -672,15 +676,30 @@ setDNS(){
 	else
 		printError "DNS not changed."
 	fi
-		sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
-		sed -i '/.*nameservers:/!b;n;c\                addresses: ['$dnsips']' $netplanConfig
+	for i in ${dnsips//,/ }
+	do
+		echo "# This file was automagically created by the setips script." > /etc/resolv.conf
+		echo "nameserver $i" >> /etc/resolv.conf
+	done
+	sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
+	sed -i '/.*nameservers:/!b;n;c\                addresses: ['$dnsips']' $netplanConfig
 }
 
 # Set MTU
 setMTU(){
 	echo; echo "[---------  MTU  ---------]"
-	listCoreInterfaces
-	whatInterface
+	if [[ ! $ethInt ]]; then
+		whatInterface
+	elif [[ -z $runningFirstTime ]]; then
+		echo; printQuestion "Do you change the interface? (y/N)"; read REPLY
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			echo; printStatus "Changing the interface."
+			whatInterface
+		fi
+	else
+		echo; printStatus "Interface:  $ethInt."
+	fi
+
 	currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
 	echo; printStatus "Current MTU:  $currentMTU"
 	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
@@ -702,6 +721,10 @@ disableStubResolver(){
 	printStatus "Disabling the local DNS stub resolver"
 	systemctl disable systemd-resolved.service
 	systemctl stop systemd-resolved
+	if [[ $(cat /etc/resolv.conf | grep systemd-resolved.service) ]]; then
+		rm /etc/resolv.conf
+		setDNS
+	fi
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
@@ -1288,7 +1311,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 
 				Addtl-Redir-Pivot-IPs )
-				listCoreInterfaces
 				whatInterface
 				echo; displayIPTables
 				setupIPTablesRedirectorIPs
@@ -1299,7 +1321,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 
 				SSH-SOCKS-Proxy )
-				listCoreInterfaces
 				whatInterface
 				checkForSubinterfaces
 				cleanIPTables
@@ -1310,7 +1331,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 
 				IPTables-Pivot-IPs )
-				listCoreInterfaces
 				whatInterface
 				checkForSubinterfaces
 				echo; displayIPTables
@@ -1344,7 +1364,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 		select su in "Add-Subinterfaces" "Remove-All-Subinterfaces" "Restore-Subinterfaces" "Main-Menu"; do
 			case $su in
 				Add-Subinterfaces )
-				listCoreInterfaces
 				whatInterface
 				addSubInts
 				autoStartIPTables
@@ -1358,7 +1377,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 
 				Restore-Subinterfaces )
-				listCoreInterfaces
 				whatInterface
 				removeSubInts
 				restoreSubIntsFile
@@ -1380,7 +1398,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "Disable-DNS-Stub-Resolver" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
+		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Git-Server" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "Disable-DNS-Stub-Resolver" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
 			case $ut in
 				Install-Redirector-Tools )
 				if [[ $internet = 1 ]]; then echo; installRedirTools; else printError "Need to be online to download/install required redirector tools." ; fi
@@ -1401,6 +1419,12 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				# Default the internet opmode
 				internet=""
 				opMode
+				break
+				;;
+
+				Set-Git-Server )
+				printQuestion "What is the IP or domain for the Git Server? "; read REPLY
+				sed -i "/^redteamGogs=/c\redteamGogs=\"$REPLY\"" $setipsConfig
 				break
 				;;
 
@@ -1740,7 +1764,7 @@ else
 						echo
 					fi
 				else
-					printQuestion "What is the IP or domain for the Git (Gogs) Server? "; read REPLY
+					printQuestion "What is the IP or domain for the Git Server? "; read REPLY
 					sed -i "/^redteamGogs=/c\redteamGogs=\"$REPLY\"" $setipsConfig
 					bash $0 -u
 				fi
