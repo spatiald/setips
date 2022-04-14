@@ -320,7 +320,7 @@ whatInterface(){
 	listCoreInterfaces
 	ints=$(ip address show | grep state | grep -v LOOPBACK | awk '{ print $2 }' | cut -d: -f1)
 	echo; printQuestion "What ethernet interface?"
-	select int in $ints; do 
+	select int in $ints; do
 		export ethInt=$int
 		sed -i "/^ethInt=/c\ethInt=\"$int\"" $setipsConfig
 		break
@@ -676,9 +676,9 @@ setDNS(){
 	else
 		printError "DNS not changed."
 	fi
+	echo "# This file was automagically created by the setips script." > /etc/resolv.conf
 	for i in ${dnsips//,/ }
 	do
-		echo "# This file was automagically created by the setips script." > /etc/resolv.conf
 		echo "nameserver $i" >> /etc/resolv.conf
 	done
 	sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
@@ -697,11 +697,11 @@ setMTU(){
 			whatInterface
 		fi
 	else
-		echo; printStatus "Interface:  $ethInt."
+		echo; printStatus "Interface:  $ethInt"
 	fi
 
 	currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
-	echo; printStatus "Current MTU:  $currentMTU"
+	printStatus "Current MTU:  $currentMTU"
 	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		printQuestion "What is your desired MTU setting (default is normally 1500)?"; read MTU
@@ -721,17 +721,13 @@ disableStubResolver(){
 	printStatus "Disabling the local DNS stub resolver"
 	systemctl disable systemd-resolved.service
 	systemctl stop systemd-resolved
-	if [[ $(cat /etc/resolv.conf | grep systemd-resolved.service) ]]; then
-		rm /etc/resolv.conf
-		setDNS
-	fi
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
 checkSSH(){
 	if cat /etc/ssh/sshd_config | grep '#PermitRootLogin'; then
 		echo; printError "I have to fix your sshd_config file to allow login with password."
-		sed -i 's/.*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+		sed -i 's/.*\#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 		echo; printStatus "Checking SSH service is enabled and accepts passwords."
 		systemctl restart ssh
 		systemctl enable ssh
@@ -827,7 +823,7 @@ setupSOCKS(){
 			break
 		fi
 	done
-	echo; printQuestion "What is root's password?"; read -s password
+	echo; printQuestion "What is root's key passphrase (or password if keys are not used)?"; read -s password
 	echo; printStatus "Checking if the SSH server is running..."
 	if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
 		printGood "SSH server *is* running; let's rock."
@@ -899,6 +895,12 @@ flushIPTables(){
 
 	# Remove MASQUERADE rules
 	iptables-save > $tmp; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp; iptables-restore < $tmp; rm $tmp
+}
+
+cleanIPPivots(){
+	tmp=`mktemp`
+	iptables-save | uniq > $tmp; sed -i '/--to-destination/ {d;}' $tmp; sed -i '/--to-source/ {d;}' $tmp
+	iptables-restore < $tmp; rm $tmp
 }
 
 iptablesToggleRandomSource(){
@@ -991,6 +993,10 @@ setupIPTablesPivot(){
 	echo; printQuestion "What redirector subinterface *PORT* should the redirector listen on?"; read incomingport
 	echo; printQuestion "What is the redteam *IP* the redirector sends incoming traffic to?"; read redteamip
 	echo; printQuestion "What is the redteam *PORT* the redirector sends incoming traffic to?"; read redteamport
+	# TESTING
+	# $iptables -t nat -A PREROUTING -m state --state NEW -p $prot -d $subintip --dport $incomingport -j MARK --set-mark 0x400
+	# $iptables -t nat -A PREROUTING -m mark --mark 0x400 -p $prot -j DNAT -d $subintip --dport $incomingport --to $redteamip:$redteamport
+	# original	
 	$iptables -t nat -A PREROUTING -p $prot -j DNAT -d $subintip --dport $incomingport --to $redteamip:$redteamport
 	$iptables -t filter -I FORWARD 1 -j ACCEPT
 	# Set IPs to auto-start on reboot
@@ -1040,7 +1046,7 @@ setupAnotherRedirector(){
 				echo; printStatus "Here are the last 5 characters of your public key:  $sshBytes"
 				echo; printStatus "Checking for your SSH key on the target system."
 				echo; printQuestion "What username do you want to log in with?"; read username
-				ssh $username@$redirIP "sudo sed -i '/UseDNS/d' /etc/ssh/sshd_config; echo \"UseDNS no\" | sudo tee -a /etc/ssh/sshd_config; sudo service ssh restart; sudo grep $sshBytes /root/.ssh/authorized_keys"
+				ssh $username@$redirIP "sudo rm -f /root/setips.sh > /dev/null; sudo sed -i '/UseDNS/d' /etc/ssh/sshd_config; echo \"UseDNS no\" | sudo tee -a /etc/ssh/sshd_config; sudo service ssh restart; sudo grep $sshBytes /root/.ssh/authorized_keys"
 				if [[ $? -gt 0 ]]; then
 					echo; printStatus "SSH Key not found on target system; uploading..."
 					publicKey=$(cat /root/.ssh/id_rsa.pub) 
@@ -1121,7 +1127,7 @@ installRedirTools(){
 	echo; printStatus "Updating package repository."
 	apt-get update
 	apt-get -y autoremove
-	echo; printStatus "Attempting to install:  unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php"
+	echo; printStatus "Attempting to install:  wireguard unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php"
 	apt-get -y install wireguard unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php
 	commandStatus
 	systemctl stop apache2
@@ -1181,6 +1187,12 @@ EOF
 killall vsftpd
 EOF
 	chmod +x /root/vsftpd.stop
+	# Install Java for Cobalt Strike
+	echo; printQuestion "Would you like to install Java (required for Cobalt Strike? (y/N)"; read REPLY
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		sudo apt -y install openjdk-11-jdk
+		sudo update-java-alternatives -s java-1.11.0-openjdk-amd64
+	fi
 	if [[ $downloadError == 1 ]]; then
 		echo; printError "Something went wrong...one or more downloads didn't complete successfully."
 	else
@@ -1197,7 +1209,10 @@ cleanIPTables(){
 	tmpDNAT=`mktemp`
 	# Clean duplicate items that are next to each other; enable ipv4/ipv6 forwarding; remove old MASQUERADE method of "proxying"
 	# older forwarding technique
-	echo 1 > /proc/sys/net/ipv4/ip_forward
+	# echo 1 > /proc/sys/net/ipv4/ip_forward
+	# sysctl net.ipv4.ip_forward=1
+	iptables -I FORWARD -j ACCEPT
+	iptables -P FORWARD ACCEPT
 	# newer forwarding technique
 	sed -i '/net.ipv4.ip_forward=1/s/^#//g' /etc/sysctl.conf
 	sed -i '/net.ipv6.conf.all.forwarding=1/s/^#//g' /etc/sysctl.conf
@@ -1221,8 +1236,10 @@ cleanIPTables(){
 	# Clean masquerade rules (if applicable)
 	if [[ $(iptables-save | grep -E 'statistic') ]]; then
 		iptables-save > $tmp3; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp3; iptables-restore < $tmp3; rm $tmp3
+		iptables-save > $tmp3; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp3; iptables-restore < $tmp3; rm $tmp3
 	else
 		$iptables -t nat -A POSTROUTING -o $ethInt -j MASQUERADE
+		# $iptables -t nat -A POSTROUTING -m mark --mark 0x400 -j MASQUERADE
 	fi
 }
 
@@ -1398,7 +1415,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Utilities )
 		echo
-		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Git-Server" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "Disable-DNS-Stub-Resolver" "IPTables-flush" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
+		select ut in "Install-Redirector-Tools" "Reset-Setips-Config" "Change-Internet-OpMode" "Set-Git-Server" "Set-Hostname" "Set-Gateway" "Set-DNS" "Set-MTU" "Disable-DNS-Stub-Resolver" "IPTables-flush" "IPTables-clean-pivots" "IPTables-toggle-random-source-IPs" "IPTables-restore-on-startup" "IPTables-REMOVE-restore-on-startup" "SOCAT-Pivots-REMOVE-ALL" "SOCKS-Proxy-REMOVE-ALL" "Main-Menu"; do
 			case $ut in
 				Install-Redirector-Tools )
 				if [[ $internet = 1 ]]; then echo; installRedirTools; else printError "Need to be online to download/install required redirector tools." ; fi
@@ -1454,12 +1471,19 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 				Disable-DNS-Stub-Resolver )
 				disableStubResolver
+				setDNS
 				break
 				;;
 
 				IPTables-flush )
 				flushIPTables
 				echo; printGood "IPTables successfully flushed."
+				break
+				;;
+
+				IPTables-clean-pivots )
+				cleanIPPivots
+				echo; printGood "IPTables successfully cleaned of all pivots."
 				break
 				;;
 
@@ -1612,8 +1636,7 @@ else
 			eval subintport=\$$OPTINDplus1
 			eval tgtip=\$$OPTINDplus2
 			eval tgtport=\$$OPTINDplus3
-			#Clean old masquerade way of doing SRC NAT
-			$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
+			$iptables -t nat -A PREROUTING -i $ethInt -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
 			$iptables -t filter -I FORWARD 1 -j ACCEPT
 			printGood "Imported rule specified."
 			cleanIPTables >&2
@@ -1623,7 +1646,7 @@ else
 			;;
 		(d) # DELETE - Quick delete iptables rule
 			if [[ $# -lt $((OPTIND + 1)) ]]; then
-				echo; echo "$IAM: Option -d argument(s) missing...needs five!" >&2
+				echo; echo "$IAM: Option -s argument(s) missing...needs five!" >&2
 				echo; printHelp >&2
 				exit 2
 			fi
@@ -1635,7 +1658,7 @@ else
 			eval subintport=\$$OPTINDplus1
 			eval tgtip=\$$OPTINDplus2
 			eval tgtport=\$$OPTINDplus3
-			$iptables -t nat -D PREROUTING -p $protocol -d $subintip --dport $subintport -j DNAT --to-destination $tgtip:$tgtport
+			$iptables -t nat -D PREROUTING -i $ethInt -p $protocol -d $subintip --dport $subintport -j DNAT --to-destination $tgtip:$tgtport
 			echo; printGood "Deleted rule specified."
 			saveIPTables >&2
 			echo
@@ -1645,10 +1668,16 @@ else
 			#File format, one entry per line:  <tcp or udp> <pivot-subinterface-IP> <pivot-subinterface-listen-port> <target-IP> <target-port>
 			srcnatfile=$OPTARG
 			sed -i '/^\x*$/d' $srcnatfile > /tmp/srcnatfile #Remove blank lines
-
+			# Delete current rules
+			cleanIPPivots
 			while IFS=" " read protocol subintip subintport tgtip tgtport; do
-				echo "$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport"
-				$iptables -t nat -A PREROUTING -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
+				# echo "$iptables -t nat -A PREROUTING -i $ethInt -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport"
+				echo "Redirecting $subintip:$subintport to $tgtip:$tgtport"
+				# TESTING
+				# $iptables -t nat -A PREROUTING -m state --state NEW -p $protocol -d $subintip --dport $subintport -j MARK --set-mark 0x400
+				# $iptables -t nat -A PREROUTING -m mark --mark 0x400 -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
+				# original below
+				$iptables -t nat -A PREROUTING -i $ethInt -p $protocol -j DNAT -d $subintip --dport $subintport --to $tgtip:$tgtport
 			done <$srcnatfile
 			echo; printGood "Imported rules from file:  $srcnatfile"
 			cleanIPTables >&2
@@ -1698,7 +1727,7 @@ else
 			installRedirTools
 			echo; printGood "Setup complete."
 			# Remove the setupComplete flag to force the firstTime script to run on next start
-			rm -f $setipsFolder/setupComplete /root/.ssh/authorized_keys > /dev/null 2>&1
+			rm -f $setipsFolder/setupComplete > /dev/null 2>&1
 			echo "" > $setipsFolder/setips.log
 			;;
 		(o) # IMPORT - Setup 1:1 redirector
@@ -1729,7 +1758,7 @@ else
 			saveIPTables >&2
 			printGood "Repair complete, saving IPTables backup...run './setips.sh -l' to view current IPTables."
 			;;
-		(s) # Rerun firstTime setup script
+		(s) # Run first time script
 			firstTime >&2
 			;;
 		(t) # Testing script
