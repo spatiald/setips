@@ -1,6 +1,12 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.3 (2024Apr12-0133)'
+- CyberX2024 Version
+- Updated redirector tools (libreadline5 -> readline-common)
+- Updated default YAML for recent changes to config file (checked with yamllint)
+- Adding spacing on initial install for readability
+
 Version: '3.2 (2022Apr11-1658)'
 - CyberX2022 Version
 - Fixed masquerade changes to target specific interface
