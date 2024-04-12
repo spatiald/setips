@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.2e
+scriptVersion=3.3
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -224,7 +224,7 @@ firstTime(){
 	runningFirstTime=1
 	# Set a root password, if needed
 	echo; echo "[---------  ROOT PASSWORD  ---------]"
-	printStatus "We need to set a password on the root user. If you already have one set, please select 'N'"
+	echo; printStatus "We need to set a password on the root user. If you already have one set, please select 'N'"
 	printQuestion "Do you want to set/change root's password? (Y/n)"; read REPLY
 	if [[ $REPLY =~ ^[Nn]$ ]]; then
 		printGood "We will NOT change the root password."
@@ -247,6 +247,7 @@ firstTime(){
 	setHostname
 
 	# Identify ethernet interface
+	echo; echo "[---------  ETHERNET INTERFACE  ---------]"
 	whatInterface
 	# ethInt="$(ip l show | grep ^2: | cut -f2 -d':' | sed 's/^ *//g')"
 
@@ -256,8 +257,6 @@ firstTime(){
 	# Setup static IP
 	setupStaticIP
 
-	# Apply the network plan
-	netplan generate; netplan apply
 	echo; printGood "Initial setup \"firstTime\" script complete."
 }
 
@@ -610,7 +609,7 @@ setHostname(){
 # Set IP
 setIP(){
 	echo; echo "[---------  IP  ---------]"
-	REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
+	echo; REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
 	IP=$(ip a | grep inet | grep $ethInt | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
 	staticIPLoop(){
 		until [[ $valid_ip == 1 ]]
@@ -643,7 +642,7 @@ setIP(){
 # Set default gateway
 setGateway(){
 	echo; echo "[---------  GATEWAY  ---------]"
-	printStatus "Current route table:"
+	echo; printStatus "Current route table:"
 	ip route; echo
 	currentgw="$( getInternetInfo 3 )"
 	if [[ -z ${currentgw:+x} ]]; then
@@ -659,7 +658,7 @@ setGateway(){
 		printError "Gateway not changed."
 	fi
 	sed -i "/^GATEWAY=/c\GATEWAY=\"$currentgw\"" $setipsConfig
-	sed -i "s|gateway4:.*|gateway4: $currentgw|;" $netplanConfig
+	sed -i "s|via:.*|via: $currentgw|;" $netplanConfig
 }
 
 # Set DNS
@@ -667,7 +666,7 @@ setDNS(){
 	echo; echo "[---------  DNS  ---------]"
 	# if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then printStatus "Enabling DNS stub resolver temporarily."; systemctl enable systemd-resolved.service > /dev/null; fi
 	# dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
-	dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
+	echo; dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
 	printStatus "Your current DNS server(s):  $dnsips"
 	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -688,7 +687,7 @@ setDNS(){
 # Set MTU
 setMTU(){
 	echo; echo "[---------  MTU  ---------]"
-	if [[ ! $ethInt ]]; then
+	echo; if [[ ! $ethInt ]]; then
 		whatInterface
 	elif [[ -z $runningFirstTime ]]; then
 		echo; printQuestion "Do you change the interface? (y/N)"; read REPLY
@@ -697,7 +696,7 @@ setMTU(){
 			whatInterface
 		fi
 	else
-		echo; printStatus "Interface:  $ethInt"
+		printStatus "Interface:  $ethInt"
 	fi
 
 	currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
@@ -718,19 +717,20 @@ setMTU(){
 # Disable/stop DNS stub resolver
 disableStubResolver(){
 	echo; echo "[---------  CONFIGURE DNS STUB RESOLVER  ---------]"
-	printStatus "Disabling the local DNS stub resolver"
+	echo; printStatus "Disabling the local DNS stub resolver"
 	systemctl disable systemd-resolved.service
 	systemctl stop systemd-resolved
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
 checkSSH(){
-	if cat /etc/ssh/sshd_config | grep '#PermitRootLogin'; then
+	if cat /etc/ssh/sshd_config | grep '#PermitRootLogin' >/dev/null; then
 		echo; printError "I have to fix your sshd_config file to allow login with password."
 		sed -i 's/.*\#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 		echo; printStatus "Checking SSH service is enabled and accepts passwords."
 		systemctl restart ssh
 		systemctl enable ssh
+		printGood "Root login permitted."
 	fi
 }
 
@@ -753,19 +753,22 @@ ExecStart=$autostartSOCKS
 WantedBy=multi-user.target
 EOF
 	systemctl enable autostart_socks.service
-	echo; printGood "Created systemd unit file for starting SOCKS proxy"
+	echo; printGood "Created systemd unit file for starting SOCKS proxy."
 }
 
 createStaticYAML() {
     defaultYAML() {
-		local YAML="network:\n"
+		local YAML="---\n"
+		YAML+="network:\n"
 		YAML+="    version: 2\n"
 		YAML+="    renderer: $networkManager\n"
 		YAML+="    ethernets:\n"
 		YAML+="        $ethInt:\n"
-		YAML+="            dhcp4: no\n"
+		YAML+="            dhcp4: false\n"
 		YAML+="            addresses: [$IP]\n"
-		YAML+="            gateway4: $GATEWAY\n"
+		YAML+="            routes:\n"
+        YAML+="                - to: default\n"
+        YAML+="                  via: $GATEWAY\n"
 		YAML+="            mtu: $MTU\n"
 		YAML+="            nameservers:\n"
 		YAML+="                addresses: [$NAMESERVERS]"
@@ -775,6 +778,8 @@ createStaticYAML() {
 	[ -f $netplanConfig ] && sudo rm $netplanConfig
 	# Create default YAML
 	sudo echo -e "$(defaultYAML)" > $netplanConfig
+	# Ensure YAML is not viewable by others
+	chmod 600 $netplanConfig
 }
 
 setupStaticIP(){
@@ -784,6 +789,7 @@ setupStaticIP(){
 	setDNS
 	setMTU
 	netplan generate; netplan apply
+	echo; printStatus "NOTE: You can ignore warnings about the ovsdb-server.service not running."
 }
 
 # Display SOCKS proxies
@@ -1127,8 +1133,8 @@ installRedirTools(){
 	echo; printStatus "Updating package repository."
 	apt-get update
 	apt-get -y autoremove
-	echo; printStatus "Attempting to install:  wireguard unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php"
-	apt-get -y install wireguard unzip fping ipcalc socat libreadline5 screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php
+	echo; printStatus "Attempting to install:  wireguard unzip fping ipcalc socat readline-common screen traceroute nmap proxychains vsftpd apache2 php"
+	apt-get -y install wireguard unzip fping ipcalc socat readline-common screen traceroute nmap proxychains vsftpd apache2 php libapache2-mod-php
 	commandStatus
 	systemctl stop apache2
 	systemctl stop vsftpd
@@ -1591,6 +1597,12 @@ printGood "Configuration and logging directory:  $setipsFolder"
 # Check OS version
 osCheck
 
+# Ask to run interface setup or, if setup, collect information
+if [[ ! -f $setipsFolder/setupComplete ]]; then
+	firstTime
+	touch $setipsFolder/setupComplete
+fi
+
 # Determine the operational mode - ONLINE or OFFLINE
 opMode
 
@@ -1611,11 +1623,6 @@ if [[ $1 == "help" || $1 == "--help" ]]; then
 	echo; printStatus "setips.sh provides an interactive menu (-i) or arguements (see usage below)"
 	echo; printHelp
 elif [[ $1 == "" ]]; then
-	# Ask to run interface setup or, if setup, collect information
-	if [[ ! -f $setipsFolder/setupComplete ]]; then
-		firstTime
-		touch $setipsFolder/setupComplete
-	fi
 	interactiveMode
 else
 	IAM=${0##*/} # Short basename
