@@ -666,9 +666,14 @@ setDNS(){
 	echo; echo "[---------  DNS  ---------]"
 	# if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then printStatus "Enabling DNS stub resolver temporarily."; systemctl enable systemd-resolved.service > /dev/null; fi
 	# dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
-	echo; dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
-	printStatus "Your current DNS server(s):  $dnsips"
-	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
+	echo
+ 	if [ ! -f /etc/resolv.conf ]; then
+ 		printError "You do not currently have DNS setup."
+   	else
+    		dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
+		printStatus "Your current DNS server(s):  $dnsips"
+ 	fi 	
+  	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		printQuestion "What are the DNS server IPs (comma separated)?"; read dnsips
 		printGood "Your DNS settings were updated."
@@ -720,7 +725,7 @@ disableStubResolver(){
 	echo; printStatus "Disabling the local DNS stub resolver"
 	systemctl disable systemd-resolved.service
 	systemctl stop systemd-resolved
- 	rm /etc/resolv.conf
+ 	rm /etc/resolv.conf; echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
@@ -759,21 +764,36 @@ EOF
 
 createStaticYAML() {
     defaultYAML() {
-		local YAML="---\n"
-		YAML+="network:\n"
-		YAML+="    version: 2\n"
-		YAML+="    renderer: $networkManager\n"
-		YAML+="    ethernets:\n"
-		YAML+="        $ethInt:\n"
-		YAML+="            dhcp4: false\n"
-		YAML+="            addresses: [$IP]\n"
-		YAML+="            routes:\n"
-        YAML+="                - to: default\n"
-        YAML+="                  via: $GATEWAY\n"
-		YAML+="            mtu: $MTU\n"
-		YAML+="            nameservers:\n"
-		YAML+="                addresses: [$NAMESERVERS]"
-		printf "%s" "$YAML"
+	YAML+="network:
+	YAML+="  ethernets:\n"
+ 	YAML+="    $ethInt:\n"
+  	YAML+="      dhcp4: false\n"
+   	YAML+="      addresses:\n"
+    	YAML+="        - $IP\n"
+     	YAML+="      routes:\n"
+      	YAML+="        - to: 0.0.0.0/0\n"
+       	YAML+="          via: $GATEWAY\n"
+	YAML+="          on-link: true\n"
+	YAML+="      nameservers:\n"
+	YAML+="        addresses: [$NAMESERVERS]\n"
+	YAML+="  version: 2"
+#
+#	local YAML="---\n"
+#	YAML+="network:\n"
+#	YAML+="    version: 2\n"
+#	YAML+="    renderer: $networkManager\n"
+#	YAML+="    ethernets:\n"
+#	YAML+="        $ethInt:\n"
+#	YAML+="            dhcp4: false\n"
+#	YAML+="            addresses: [$IP]\n"
+#	YAML+="            routes:\n"
+#       YAML+="                - to: default\n"
+#       YAML+="                  via: $GATEWAY\n"
+#	YAML+="            mtu: $MTU\n"
+#	YAML+="            nameservers:\n"
+#	YAML+="                addresses: [$NAMESERVERS]"
+#
+	printf "%s" "$YAML"
 	}
 	# Clear configs
 	[ -f $netplanConfig ] && sudo rm $netplanConfig
