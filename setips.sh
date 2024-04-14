@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.3
+scriptVersion=3.3a
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -720,6 +720,7 @@ disableStubResolver(){
 	echo; printStatus "Disabling the local DNS stub resolver"
 	systemctl disable systemd-resolved.service
 	systemctl stop systemd-resolved
+ 	rm /etc/resolv.conf
 }
 
 # Change /etc/ssh/sshd_config conifguration for root to only login "without-password" to "yes"
