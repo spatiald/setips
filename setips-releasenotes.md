@@ -6,6 +6,7 @@ Version: '3.3 (2024Apr12-0133)'
 - Updated redirector tools (libreadline5 -> readline-common)
 - Updated default YAML for recent changes to config file (checked with yamllint)
 - Adding spacing on initial install for readability
+- (3.3a) disableStubResolver also removes soft link /etc/resolv.conf
 
 Version: '3.2 (2022Apr11-1658)'
 - CyberX2022 Version
