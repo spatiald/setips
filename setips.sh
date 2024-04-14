@@ -533,6 +533,7 @@ addSubInts(){
 	cat $netplanConfig | grep "/" | cut -d "[" -f2 | cut -d "]" -f1 | sed "s/\,/\n/g" > $tmpUsedIPs
 
 	# Identify the CIDR and append to each of the new IPs
+	# CyberX 2024
 	CIDR=$(listCoreIP | sed -n 's/.*\///p')
 	for ip in $(cat $tmpIPs); do echo $ip/$CIDR >> $tmpUsedIPs; done
 
