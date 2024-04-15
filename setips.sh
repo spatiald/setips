@@ -779,7 +779,7 @@ EOF
 createStaticYAML() {
     defaultYAML() {
 	local YAML="network:\n"
-	YAML+="  version: 2"
+	YAML+="  version: 2\n"
 	YAML+="  ethernets:\n"
  	YAML+="    $ethInt:\n"
   	YAML+="      dhcp4: false\n"
