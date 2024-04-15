@@ -288,19 +288,20 @@ listIPs-oneline(){
 	listIPsOnly | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//'
 }
 
-# List subinterface IPs, one per line
-listSubIntIPsOnly(){
-	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | sed '/127.0/d' | tail -n +2 | cut -d/ -f1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d'
-}
-
 # List interfaces available
 listInts(){
 	ip address show | grep "mtu" | awk '{ print $2 }' | sed "s/://g" | sed "/lo/d"
 }
 
-# List subints, one per line
+# List subinterface IPs, one per line
+listSubIntIPsOnly(){
+	ip address show $ethInt | grep "inet" | grep -v "inet6" | awk '{ print $2 }' | sed '/127.0/d' | tail -n +2 | cut -d/ -f1 | awk '{printf "%s\n",$0} END {print ""}' | sed '/^$/d'
+}
+
+# List subints with CIDR, one per line
 listSubInts(){
-	ip address show | grep secondary | awk '{ print $2 }'
+	#ip address show | grep secondary | awk '{ print $2 }'
+	netplan get ethernets.$ethInt.addresses | tail -n+2 | cut -d "\"" -f2 | cut -d "\"" -f1
 }
 
 # Find the core IP address in use
