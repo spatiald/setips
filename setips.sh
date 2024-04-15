@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.3b
+scriptVersion=3.3c
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -268,8 +268,9 @@ getInternetInfo(){
 
 # List IPs with interface assignments, one per line
 listIPs(){
-	echo; printStatus "Ethernet interfaces that have assigned addresses:"
-	ip address show | grep "inet" | grep -v "inet6" | awk '{ print $2, $7, $8 }' | sed '/127.0/d'
+	echo; printStatus "Ethernet interface $ethInt assigned addresses:"
+	#ip address show | grep "inet" | grep -v "inet6" | awk '{ print $2, $7, $8 }' | sed '/127.0/d'
+	netplan get ethernets.$ethInt.addresses | cut -d "\"" -f2 | cut -d "\"" -f1
 }
 
 # List only subinterface assignments, one per line
@@ -305,7 +306,7 @@ listSubInts(){
 # Find the core IP address in use
 listCoreInterfaces(){
 	echo; printStatus "Core IP addresses on this system:"
-	ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $7 }' | sed '/127.0/d'
+	ip address show | grep "inet" | grep -v "inet6" | grep -v "secondary" | awk '{ print $2, $NF }' | sed '/127.0/d'
 }
 
 listCoreIP(){
@@ -370,8 +371,12 @@ howManyIPs(){
 # Remove all secondary addresses
 removeSubInts(){
 	tmp=`mktemp`
-	rm -f $tmp
-	sed -i -e "0,/\[\([^]]*\)\]/s|\[\([^]]*\)\]|[$(listCoreIP)]|" $netplanConfig
+#	rm -f $tmp
+#	sed -i -e "0,/\[\([^]]*\)\]/s|\[\([^]]*\)\]|[$(listCoreIP)]|" $netplanConfig
+	#netplan get ethernets.$ethInt.addresses | head -1 | cut -d "\"" -f2 | cut -d "\"" -f1 > $tmp
+	listCoreIP > $tmp	
+	netplan set ethernets.$ethInt.addresses=null
+	netplan set ethernets.$ethInt.addresses=[$(cat $tmp)]
 	netplan generate; netplan apply
 	echo; printStatus "Removed all secondary addresses."
 }
@@ -529,19 +534,21 @@ addSubInts(){
 		esac
 	done
 
-	# Pull current ips, replace ',' with new line
-	cat $netplanConfig | grep "/" | cut -d "[" -f2 | cut -d "]" -f1 | sed "s/\,/\n/g" > $tmpUsedIPs
-
-	# Identify the CIDR and append to each of the new IPs
-	# CyberX 2024
-	CIDR=$(listCoreIP | sed -n 's/.*\///p')
+	# Pull current ips - not needed as Netplan v0.105+ set command is additive and doesn't replace
+	#cat $netplanConfig | grep "/" | cut -d "[" -f2 | cut -d "]" -f1 | sed "s/\,/\n/g" > $tmpUsedIPs ## old, replace ',' with new line
+	netplan get ethernets.$ethInt.addresses | cut -d "\"" -f2 | cut -d "\"" -f1 | sed "s/\,/\n/g" > $tmpUsedIPs
+	
+	# Identify the CIDR, append to each of the new IPs, and add to list of current IPs
+	#CIDR=$(listCoreIP | sed -n 's/.*\///p')
+	CIDR=$(netplan get ethernets.$ethInt.addresses | head -1 | cut -d "\"" -f2 | cut -d "\"" -f1 | sed -n 's/.*\///p')
 	for ip in $(cat $tmpIPs); do echo $ip/$CIDR >> $tmpUsedIPs; done
 
-	# Append new ips to current ips, unique w/out sorting, and then replace new lines with ','
+	# Unique addrs w/out sorting, and then replace new lines with ','
 	cat $tmpUsedIPs | awk '!x[$0]++' | sed ':a; N; $!ba; s/\n/,/g' > $tmpIPs
 
 	# Add clean addresses to netplan
-	sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $tmpIPs)']|' $netplanConfig
+	#sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $tmpIPs)']|' test.yaml
+	netplan set ethernets.$ethInt.addresses=[$(cat $tmpIPs)]
 
 	netplan generate; netplan apply
 	printGood "Done."; echo
@@ -579,8 +586,8 @@ checkForSubinterfaces(){
 # Restore subinterface IPs from file
 restoreSubIntsFile(){
 	# Identify the subinterfaces save file
-	echo; printStatus "The subinterface file should be a one-line, comma-seperated list of IP/CIDR; for example, '192.168.1.1/24,192.168.1.55/24'"
-	echo; printQuestion "What is the full path to the setips save file (default is $ipsCurrent)?"; read savefile || return
+	echo; printStatus "The subinterface save file should be a one-line, comma-seperated list of IP/CIDR; for example, '192.168.1.1/24,192.168.1.55/24'"
+	echo; printQuestion "What is the full path to the subinterfaces save file (default is $ipsCurrent)?"; read savefile || return
 	if [[ -z ${savefile:+x} ]]; then
 		printGood "Restoring from $ipsCurrent"
 		savefile=$ipsCurrent
@@ -589,7 +596,9 @@ restoreSubIntsFile(){
 	fi
 
 	# Add clean addresses to netplan
-	sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $savefile)']|' $netplanConfig
+	#sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $savefile)']|' $netplanConfig
+	netplan set ethernets.$ethInt.addresses=null # the current core IP maybe different from the savefile first IP...what is desired?
+	netplan set ethernets.$ethInt.addresses=[$(listCoreIP),$(cat $savefile)]
 }
 
 # Change hostname [optional]
@@ -611,7 +620,8 @@ setHostname(){
 setIP(){
 	echo; echo "[---------  IP  ---------]"
 	echo; REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
-	IP=$(ip a | grep inet | grep $ethInt | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
+	#IP=$(ip a | grep inet | grep $ethInt | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
+	IP=$(listCoreIP)
 	staticIPLoop(){
 		until [[ $valid_ip == 1 ]]
 		do
@@ -637,7 +647,8 @@ setIP(){
 		fi
 	fi
 	sed -i "/^IP=/c\IP=\"$IP\"" $setipsConfig
-	sed -i "0,/addresses:/{s|addresses:.*|addresses: [$IP]|;}" $netplanConfig
+#	sed -i "0,/addresses:/{s|addresses:.*|addresses: [$IP]|;}" $netplanConfig
+
 }
 
 # Set default gateway
@@ -696,7 +707,8 @@ setMTU(){
 	echo; if [[ ! $ethInt ]]; then
 		whatInterface
 	elif [[ -z $runningFirstTime ]]; then
-		echo; printQuestion "Do you change the interface? (y/N)"; read REPLY
+		echo; printStatus "Targeted interface:  $ethInt"
+		printQuestion "Do you want to adjust the targeted interface? (y/N)"; read REPLY
 		if [[ $REPLY =~ ^[Yy]$ ]]; then
 			echo; printStatus "Changing the interface."
 			whatInterface
@@ -1338,8 +1350,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 		echo "[SSH-SOCKS-Proxy] sets up SOCKS proxy on a port"
 		echo "[IPTables-Pivot-IPs] redirects redirector IP/Port to target IP/Port"
 		echo "[Socat-Pivot] sets up socat listener that redirects to target IP/Port"
-		echo "[SublimeText] installs SublimeText"
-		echo "[Cobaltstrike...] installs the programs listed"
 		echo "[Static-IP] persistent static IP"
 		echo
 		select au in "Initial-Redirector" "Remote-Redirector" "Addtl-Redir-Pivot-IPs" "SSH-SOCKS-Proxy" "IPTables-Pivot-IPs" "Socat-Pivot" "Static-IP" "Main-Menu"; do
@@ -1406,7 +1416,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 		Subinterfaces )
 		echo
-		select su in "Add-Subinterfaces" "Remove-All-Subinterfaces" "Restore-Subinterfaces" "Main-Menu"; do
+		select su in "Add-Subinterfaces" "Add-Subinterfaces-From-File" "Remove-All-Subinterfaces" "Restore-Subinterfaces" "Main-Menu"; do
 			case $su in
 				Add-Subinterfaces )
 				whatInterface
@@ -1415,7 +1425,16 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				break
 				;;
 
+				Add-Subinterfaces-From-File )
+				whatInterface
+				restoreSubIntsFile
+				netplan generate; netplan apply
+				autoStartIPTables
+				break
+				;;
+
 				Remove-All-Subinterfaces )
+				whatInterface
 				listIPs
 				removeSubInts
 				break

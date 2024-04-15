@@ -7,6 +7,7 @@ Version: '3.3 (2024Apr12-0133)'
 - Updated default YAML for recent changes to config file (checked with yamllint)
 - Adding spacing on initial install for readability
 - (3.3a) disableStubResolver also removes soft link /etc/resolv.conf
+- (3.3b/c) updates to YAML config and use of netplan get/set
 
 Version: '3.2 (2022Apr11-1658)'
 - CyberX2022 Version
