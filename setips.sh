@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.3c
+scriptVersion=3.3d
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -779,6 +779,7 @@ EOF
 createStaticYAML() {
     defaultYAML() {
 	local YAML="network:\n"
+	YAML+="  version: 2"
 	YAML+="  ethernets:\n"
  	YAML+="    $ethInt:\n"
   	YAML+="      dhcp4: false\n"
@@ -789,8 +790,7 @@ createStaticYAML() {
        	YAML+="          via: $GATEWAY\n"
 	YAML+="          on-link: true\n"
 	YAML+="      nameservers:\n"
-	YAML+="        addresses: [$NAMESERVERS]\n"
-	YAML+="  version: 2"
+	YAML+="        addresses: [$NAMESERVERS]"
 #
 #	local YAML="---\n"
 #	YAML+="network:\n"
