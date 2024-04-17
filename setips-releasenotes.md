@@ -8,6 +8,7 @@ Version: '3.3 (2024Apr12-0133)'
 - Adding spacing on initial install for readability
 - (3.3a) disableStubResolver also removes soft link /etc/resolv.conf
 - (3.3b/c) updates to YAML config and use of netplan get/set
+- (3.3d/e) updates to YAML; add MTU back to YAML; add check to clean addsubints file
 
 Version: '3.2 (2022Apr11-1658)'
 - CyberX2022 Version
