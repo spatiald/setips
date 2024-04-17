@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.3d
+scriptVersion=3.3e
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -598,6 +598,7 @@ restoreSubIntsFile(){
 
 	# Add clean addresses to netplan
 	#sed -i '0,/addresses/s|addresses:.*|addresses: ['$(cat $savefile)']|' $netplanConfig
+	sed -i '/^[[:space:]]*$/d' $savefile # remove newlines and white space
 	netplan set ethernets.$ethInt.addresses=null # the current core IP maybe different from the savefile first IP...what is desired?
 	netplan set ethernets.$ethInt.addresses=[$(listCoreIP),$(cat $savefile)]
 }
@@ -784,11 +785,12 @@ createStaticYAML() {
  	YAML+="    $ethInt:\n"
   	YAML+="      dhcp4: false\n"
    	YAML+="      addresses:\n"
-    	YAML+="        - $IP\n"
-     	YAML+="      routes:\n"
-      	YAML+="        - to: 0.0.0.0/0\n"
-       	YAML+="          via: $GATEWAY\n"
+   	YAML+="        - $IP\n"
+    YAML+="      routes:\n"
+    YAML+="        - to: 0.0.0.0/0\n"
+	YAML+="          via: $GATEWAY\n"
 	YAML+="          on-link: true\n"
+	YAML+="      mtu: $MTU\n"
 	YAML+="      nameservers:\n"
 	YAML+="        addresses: [$NAMESERVERS]"
 #
