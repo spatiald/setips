@@ -8,7 +8,7 @@
 # Author : spatiald
 ############################################################################
 
-scriptVersion=3.3e
+scriptVersion=3.4
 
 # Check that we're root
 if [[ $UID -ne 0 ]]; then
@@ -98,8 +98,11 @@ downloadError="0"
 counter=0
 fping=$(which fping)
 ping=$(which ping)
+wget=$(which wget)
+curl=$(which curl)
 iptables=$(which iptables)
 socatDownload="apt -y install socat"
+userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.3124.72"
 
 printGood(){
 	echo -e "\x1B[01;32m[+]\x1B[0m $1"
@@ -186,19 +189,30 @@ opMode(){
 
 # Check internet connectivity
 checkInternet(){
-	echo; printStatus "Checking internet connectivity..."
-	if [[ $internet == "1" || -z $internet ]]; then
-		# Check internet connecivity
-		WGET=`which wget`
-		$WGET -q --tries=5 --timeout=5 --spider -U "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko" http://ipchicken.com
-		if [[ $? -eq 0 ]]; then
-			printGood "Internet connection confirmed...continuing."
-			internet=1
-		else
-			echo; printError "No internet connectivity; entering 'OFFLINE' mode."
-			internet=0
-		fi
-	fi
+    echo; printStatus "Checking internet connectivity..."
+    if [[ $internet == "1" || -z $internet ]]; then
+        # Use multiple methods to verify connectivity
+        # 1. Try DNS resolution first (faster than full HTTP requests)
+        if host -W 2 1.1.1.1 >/dev/null 2>&1 || host -W 2 google.com >/dev/null 2>&1; then
+            # 2. Try ICMP ping to multiple reliable targets
+            if $ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 || $ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+                # 3. Finally, try HTTP connectivity to diverse endpoints
+                if $wget -q --spider --timeout=3 --tries=2 -U "$userAgent" https://1.1.1.1 >/dev/null 2>&1 || 
+                   $wget -q --spider --timeout=3 --tries=2 -U "$userAgent" https://www.cloudflare.com >/dev/null 2>&1 || 
+                   $curl -s --connect-timeout 3 -A "$userAgent" https://www.google.com >/dev/null 2>&1; then
+                    printGood "Internet connection confirmed...continuing."
+                    internet=1
+                    return 0
+                fi
+            fi
+        fi
+        
+        # If we get here, all checks failed
+        echo; printError "No internet connectivity; entering 'OFFLINE' mode."
+        internet=0
+        return 1
+    fi
+    return 0
 }
 
 # Capture a users Ctrl-C
@@ -620,118 +634,164 @@ setHostname(){
 
 # Set IP
 setIP(){
-	echo; echo "[---------  IP  ---------]"
-	echo; REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
-	#IP=$(ip a | grep inet | grep $ethInt | grep -v inet6 | grep -v 127.0.0.1 | grep -v secondary | cut -f6 -d' ')
-	IP=$(listCoreIP)
-	staticIPLoop(){
-		until [[ $valid_ip == 1 ]]
-		do
-			valid_ip=0
-			printQuestion "What would you like to set as your primary static IP/CIDR (i.e. 192.168.1.1/24)? "; read IP
-			if [[ "$IP" =~ $REGEX ]]; then
-			        printGood "Valid IP: $IP"
-			        valid_ip=1
-			else
-			        printError "You didn't provide a valid IP: $IP"
-			        echo "Please provide your IP/CIDR in this format example - 192.168.1.1/24"
-			fi
-		done
-	}
-	printStatus "Configuring a static IP on the server."
-	if [[ -z $IP ]]; then
-		staticIPLoop
-	else
-		echo "The current IP on this server is:  $IP"
-		printQuestion "Would you like to set the current IP as the primary static IP on the server? (Y/n)"; read REPLY
-		if [[ $REPLY =~ ^[Nn]$ ]]; then
-			staticIPLoop
-		fi
-	fi
-	sed -i "/^IP=/c\IP=\"$IP\"" $setipsConfig
-#	sed -i "0,/addresses:/{s|addresses:.*|addresses: [$IP]|;}" $netplanConfig
-
+    echo; echo "[---------  IP  ---------]"
+    echo; REGEX='(((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?))(\/([8-9]|[1-2][0-9]|3[0-2]))([^0-9.]|$)'
+    IP=$(listCoreIP)
+    staticIPLoop(){
+        until [[ $valid_ip == 1 ]]
+        do
+            valid_ip=0
+            printQuestion "What would you like to set as your primary static IP/CIDR (i.e. 192.168.1.1/24)? "; read IP
+            if [[ "$IP" =~ $REGEX ]]; then
+                printGood "Valid IP: $IP"
+                valid_ip=1
+            else
+                printError "You didn't provide a valid IP: $IP"
+                echo "Please provide your IP/CIDR in this format example - 192.168.1.1/24"
+            fi
+        done
+    }
+    printStatus "Configuring a static IP on the server."
+    if [[ -z $IP ]]; then
+        staticIPLoop
+    else
+        echo "The current IP on this server is:  $IP"
+        printQuestion "Would you like to set the current IP as the primary static IP on the server? (Y/n)"; read REPLY
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            staticIPLoop
+        fi
+    fi
+    # Update the config file
+    sed -i "/^IP=/c\IP=\"$IP\"" $setipsConfig
+    
+    # Update netplan with the new IP, replacing only the primary address
+    # Get current addresses to preserve secondary ones
+    currentAddresses=$(netplan get ethernets.$ethInt.addresses | tail -n+2 | cut -d "\"" -f2 | cut -d "\"" -f1)
+    
+    # Clear existing addresses first
+    netplan set ethernets.$ethInt.addresses=null
+    
+    # Set the primary IP address
+    if [[ -n "$currentAddresses" ]]; then
+        # If we had secondary addresses, add them back
+        netplan set ethernets.$ethInt.addresses=[$IP,$currentAddresses]
+    else
+        # Just set the primary IP
+        netplan set ethernets.$ethInt.addresses=[$IP]
+    fi
+    
+    printGood "Primary IP updated to $IP in netplan configuration"
 }
 
 # Set default gateway
 setGateway(){
-	echo; echo "[---------  GATEWAY  ---------]"
-	echo; printStatus "Current route table:"
-	ip route; echo
-	currentgw="$( getInternetInfo 3 )"
-	if [[ -z ${currentgw:+x} ]]; then
-		printError "You do not have a default gateway set."
-	else
-		echo "Your primary gateway is:  $currentgw"
-	fi
-	printQuestion "Do you want to update your gateway? (y/N) "; read REPLY
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		printQuestion "What is the IP of the gateway?"; read currentgw
-		printGood "Your gateway was updated to:  $currentgw"
-	else
-		printError "Gateway not changed."
-	fi
-	sed -i "/^GATEWAY=/c\GATEWAY=\"$currentgw\"" $setipsConfig
-	sed -i "s|via:.*|via: $currentgw|;" $netplanConfig
+    echo; echo "[---------  GATEWAY  ---------]"
+    echo; printStatus "Current route table:"
+    ip route; echo
+    currentgw="$( getInternetInfo 3 )"
+    if [[ -z ${currentgw:+x} ]]; then
+        printError "You do not have a default gateway set."
+    else
+        echo "Your primary gateway is:  $currentgw"
+    fi
+    printQuestion "Do you want to update your gateway? (y/N) "; read REPLY
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        printQuestion "What is the IP of the gateway?"; read currentgw
+        printGood "Your gateway was updated to:  $currentgw"
+
+        # Update the config file
+        sed -i "/^GATEWAY=/c\GATEWAY=\"$currentgw\"" $setipsConfig
+        
+        # Update netplan with the new gateway
+        # First remove existing routes
+        netplan set ethernets.$ethInt.routes=null
+        
+        # Then add the new default route
+        netplan set "ethernets.$ethInt.routes=[{to: 0.0.0.0/0, via: $currentgw, on-link: true}]"
+        
+        printGood "Gateway updated to $currentgw in netplan configuration"
+    else
+        printError "Gateway not changed."
+    fi
 }
 
 # Set DNS
 setDNS(){
-	echo; echo "[---------  DNS  ---------]"
-	# if [[ $(systemctl status systemd-resolved.service | grep dead ) ]]; then printStatus "Enabling DNS stub resolver temporarily."; systemctl enable systemd-resolved.service > /dev/null; fi
-	# dnsips=$(systemd-resolve --status | sed -n '/DNS Servers/,/^$/p' | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | sort -u | sed ':a; N; $!ba; s/\n/,/g')
-	echo
- 	if [ ! -f /etc/resolv.conf ]; then
- 		printError "You do not currently have DNS setup."
-   	else
-    		dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
-		printStatus "Your current DNS server(s):  $dnsips"
- 	fi 	
-  	printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		printQuestion "What are the DNS server IPs (comma separated)?"; read dnsips
-		printGood "Your DNS settings were updated."
-	else
-		printError "DNS not changed."
-	fi
-	echo "# This file was automagically created by the setips script." > /etc/resolv.conf
-	for i in ${dnsips//,/ }
-	do
-		echo "nameserver $i" >> /etc/resolv.conf
-	done
-	sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
-	sed -i '/.*nameservers:/!b;n;c\                addresses: ['$dnsips']' $netplanConfig
+    echo; echo "[---------  DNS  ---------]"
+    echo
+    if [ ! -f /etc/resolv.conf ]; then
+        printError "You do not currently have DNS setup."
+        dnsips="8.8.8.8,8.8.4.4"
+    else
+        dnsips=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
+        printStatus "Your current DNS server(s):  $dnsips"
+    fi     
+    printQuestion "Do you want to change your DNS servers? (y/N) "; read REPLY
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        printQuestion "What are the DNS server IPs (comma separated)?"; read dnsips
+        printGood "Your DNS settings were updated."
+
+        # Update resolv.conf
+        echo "# This file was automagically created by the setips script." > /etc/resolv.conf
+        for i in ${dnsips//,/ }
+        do
+            echo "nameserver $i" >> /etc/resolv.conf
+        done
+        
+        # Update config file
+        sed -i "/^NAMESERVERS=/c\NAMESERVERS=\"$dnsips\"" $setipsConfig
+        
+        # Set the global NAMESERVERS variable for use in createStaticYAML
+        NAMESERVERS="$dnsips"
+
+        # Update netplan's nameservers configuration
+        netplan set ethernets.$ethInt.nameservers.addresses=[$dnsips]
+    else
+        printError "DNS not changed."
+    fi
 }
 
 # Set MTU
 setMTU(){
-	echo; echo "[---------  MTU  ---------]"
-	echo; if [[ ! $ethInt ]]; then
-		whatInterface
-	elif [[ -z $runningFirstTime ]]; then
-		echo; printStatus "Targeted interface:  $ethInt"
-		printQuestion "Do you want to adjust the targeted interface? (y/N)"; read REPLY
-		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			echo; printStatus "Changing the interface."
-			whatInterface
-		fi
-	else
-		printStatus "Interface:  $ethInt"
-	fi
+    echo; echo "[---------  MTU  ---------]"
+    
+    # Check if interface is set
+    if [[ ! $ethInt ]]; then
+        whatInterface
+    elif [[ -z $runningFirstTime ]]; then
+        echo; printStatus "Targeted interface:  $ethInt"
+        printQuestion "Do you want to adjust the targeted interface? (Y/n)"; read REPLY
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo; printStatus "Changing the interface..."
+            whatInterface
+        fi
+    else
+        printStatus "Interface:  $ethInt"
+    fi
 
-	currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
-	printStatus "Current MTU:  $currentMTU"
-	printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		printQuestion "What is your desired MTU setting (default is normally 1500)?"; read MTU
-		if [[ -z ${MTU:+x} ]]; then MTU=1500; fi
-		printGood "Setting MTU of $MTU."
-	else
-		MTU=$currentMTU
-		printError "MTU not changed."
-	fi
-	sed -i -e "/^MTU=/c\MTU=$MTU" $setipsConfig
-	sed -i -r -e 's/(mtu:)\s+\w+/\1 '$MTU'/i' $netplanConfig
+    # Get current MTU
+    currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
+    printStatus "Current MTU:  $currentMTU"
+    
+    # Ask if user wants to change MTU
+    printQuestion "Do you want to change your MTU (normally 1500)? (y/N)"; read REPLY
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        printQuestion "What is your desired MTU setting (default is normally 1500)?"; read MTU
+        if [[ -z ${MTU:+x} ]]; then MTU=1500; fi
+        printGood "Setting MTU of $MTU."
+    
+        # Update MTU in setipsConfig
+        sed -i "/^MTU=/c\MTU=\"$MTU\"" $setipsConfig
+        
+        # Use netplan set to update the MTU in the netplan configuration
+        netplan set ethernets.$ethInt.mtu=$MTU
+        
+        printGood "MTU updated to $MTU in netplan configuration."
+    else
+        MTU=$currentMTU
+        printError "MTU not changed."
+        return 0  # Exit function early if no change requested
+    fi
 }
 
 # Disable/stop DNS stub resolver
@@ -755,78 +815,200 @@ checkSSH(){
 	fi
 }
 
-# Create systemd unit file for starting SOCKS proxy
-autoStartSOCKSProxy(){
-	# rc.local delete
-	# sed -i '/screen/d' /etc/rc.local
-	# sed -i '$e echo "#SOCKS - Auto-start SOCKS proxy on startup using screen"' /etc/rc.local
-	# sed -i '$e cat /tmp/ssh.tmp' /etc/rc.local
-	# rm -f /tmp/ssh.tmp
-	cat > /etc/systemd/system/autostart_socks.service << EOF
+setupSSHKey() {
+    # Create .ssh directory if it doesn't exist
+    if [[ ! -d /root/.ssh ]]; then
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+    fi
+    
+    # Check if the key already exists
+    if [[ ! -f /root/.ssh/setips_proxy ]]; then
+        echo; printStatus "Creating SSH key for SOCKS proxy and other functions"
+        ssh-keygen -t ed25519 -f /root/.ssh/setips_proxy -N "" -C "setips automated key"
+        
+        # Add the key to authorized_keys for local connections if not already there
+        if ! grep -q "$(cat /root/.ssh/setips_proxy.pub)" /root/.ssh/authorized_keys; then
+            cat /root/.ssh/setips_proxy.pub >> /root/.ssh/authorized_keys
+            chmod 600 /root/.ssh/authorized_keys
+            printGood "SSH key added to authorized_keys"
+        fi
+        
+        printGood "SSH key created at /root/.ssh/setips_proxy"
+    else
+        printStatus "Using existing SSH key at /root/.ssh/setips_proxy"
+        
+        # Make sure the key is in authorized_keys even if we didn't create it
+        if ! grep -q "$(cat /root/.ssh/setips_proxy.pub)" /root/.ssh/authorized_keys; then
+            cat /root/.ssh/setips_proxy.pub >> /root/.ssh/authorized_keys
+            chmod 600 /root/.ssh/authorized_keys
+            printGood "Existing SSH key added to authorized_keys"
+        fi
+    fi
+    
+    # Configure SSH client to use this key for localhost
+    if [[ ! -f /root/.ssh/config ]] || ! grep -q "Host localhost" /root/.ssh/config; then
+        cat >> /root/.ssh/config << EOF
+Host localhost
+    IdentityFile /root/.ssh/setips_proxy
+    StrictHostKeyChecking no
+    UserKnownHostsFile=/dev/null
+    PasswordAuthentication no
+EOF
+        chmod 600 /root/.ssh/config
+        printGood "SSH config updated to use the key for localhost connections"
+    fi
+}
+
+# Create systemd unit files for starting multiple SOCKS proxies
+autoStartSOCKSProxy() {
+    # Make sure SSH key is set up
+    setupSSHKey
+    
+    # Identify running SOCKS proxies using ss
+    # Get all listening ports with SSH that aren't the SSH server itself
+    proxy_processes=$(ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh)
+    
+    if [ -z "$proxy_processes" ]; then
+        echo; printError "No active SOCKS proxies found. Please set up at least one proxy first."
+        return 1
+    fi
+    
+    # Extract the ports from the proxy processes
+    proxy_ports=($(echo "$proxy_processes" | grep -o "0.0.0.0:\([0-9]\+\)" | cut -d':' -f2 | sort -u))
+    
+    if [ ${#proxy_ports[@]} -eq 0 ]; then
+        echo; printError "Failed to identify active SOCKS proxy ports"
+        return 1
+    fi
+    
+    echo; printStatus "Found ${#proxy_ports[@]} active SOCKS proxies on ports: ${proxy_ports[*]}"
+    
+    # First, disable and remove any existing autostart services
+    systemctl disable autostart_socks.service >/dev/null 2>&1
+    rm -f /etc/systemd/system/autostart_socks.service >/dev/null 2>&1
+    
+    # Create a service file for each proxy port
+    for port in "${proxy_ports[@]}"; do
+        cat > /etc/systemd/system/socks_proxy_${port}.service << EOF
 [Unit]
-Description="Auto-start SOCKS proxy on startup using screen"
-After=network.target
+Description=SOCKS proxy on port ${port}
+After=network.target sshd.service
+Wants=sshd.service
 
 [Service]
-ExecStart=$autostartSOCKS
+Type=simple
+ExecStart=/usr/bin/ssh -i /root/.ssh/setips_proxy -o StrictHostKeyChecking=no -N -D 0.0.0.0:${port} root@127.0.0.1
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
-	systemctl enable autostart_socks.service
-	echo; printGood "Created systemd unit file for starting SOCKS proxy."
+        # Enable the service
+        systemctl enable socks_proxy_${port}.service
+        systemctl start socks_proxy_${port}.service
+        echo; printGood "Created and enabled SOCKS proxy service for port ${port}"
+    done
+    
+    systemctl daemon-reload
+    
+    echo; printGood "Created and enabled systemd services for ${#proxy_ports[@]} SOCKS proxies (ports: ${proxy_ports[*]})."
+    echo; printStatus "Each proxy will run as an independent service and restart automatically if it fails."
+    echo; printStatus "You can manage individual proxies with: systemctl [start|stop|status] socks_proxy_PORT.service"
+    
+    # Save list of proxies for reference
+    echo "${proxy_ports[*]}" > $setipsFolder/proxies.autostart
+    echo; printStatus "Port list saved to $setipsFolder/proxies.autostart"
 }
 
+
 createStaticYAML() {
-    defaultYAML() {
-	local YAML="network:\n"
-	YAML+="  version: 2\n"
-	YAML+="  ethernets:\n"
- 	YAML+="    $ethInt:\n"
-  	YAML+="      dhcp4: false\n"
-   	YAML+="      addresses:\n"
-   	YAML+="        - $IP\n"
-    YAML+="      routes:\n"
-    YAML+="        - to: 0.0.0.0/0\n"
-	YAML+="          via: $GATEWAY\n"
-	YAML+="          on-link: true\n"
-	YAML+="      mtu: $MTU\n"
-	YAML+="      nameservers:\n"
-	YAML+="        addresses: [$NAMESERVERS]"
-#
-#	local YAML="---\n"
-#	YAML+="network:\n"
-#	YAML+="    version: 2\n"
-#	YAML+="    renderer: $networkManager\n"
-#	YAML+="    ethernets:\n"
-#	YAML+="        $ethInt:\n"
-#	YAML+="            dhcp4: false\n"
-#	YAML+="            addresses: [$IP]\n"
-#	YAML+="            routes:\n"
-#       YAML+="                - to: default\n"
-#       YAML+="                  via: $GATEWAY\n"
-#	YAML+="            mtu: $MTU\n"
-#	YAML+="            nameservers:\n"
-#	YAML+="                addresses: [$NAMESERVERS]"
-#
-	printf "%s" "$YAML"
-	}
-	# Clear configs
-	[ -f $netplanConfig ] && sudo rm $netplanConfig
-	# Create default YAML
-	sudo echo -e "$(defaultYAML)" > $netplanConfig
-	# Ensure YAML is not viewable by others
-	chmod 600 $netplanConfig
+    # Make backup directory if it doesn't exist
+    mkdir -p $setipsFolder/netplan.backups
+    
+    # Backup existing netplan files if present
+    for file in /etc/netplan/*.yaml; do
+        if [[ -f "$file" && "$file" != "$netplanConfig" ]]; then
+            cp "$file" "$setipsFolder/netplan.backups/$(basename $file).$(date +"%Y-%m-%d_%H-%M-%S")"
+        fi
+    done
+    
+    # Delete all YAML files in /etc/netplan/ directory
+    rm -f /etc/netplan/*.yaml /etc/netplan/*.yml
+    
+    # Ensure GATEWAY is set
+    GATEWAY=${GATEWAY:-$(getInternetInfo 3)}
+    
+    # Ensure MTU is set
+    MTU=${MTU:-1500}
+    
+    # Ensure NAMESERVERS is set
+    if [[ -z "$NAMESERVERS" ]]; then
+        NAMESERVERS="8.8.8.8,8.8.4.4"
+        printStatus "No DNS servers specified, using default Google DNS servers"
+    fi
+    
+    # Create a clean YAML file
+    cat > $netplanConfig << EOF
+network:
+  version: 2
+  ethernets:
+    $ethInt:
+      dhcp4: false
+      addresses: [$IP]
+      routes:
+        - to: 0.0.0.0/0
+          via: $GATEWAY
+          on-link: true
+      mtu: $MTU
+      nameservers:
+        addresses: [$NAMESERVERS]
+EOF
+    
+    # Ensure YAML is not viewable by others
+    chmod 600 $netplanConfig
+    
+    printGood "Created network configuration at $netplanConfig"
 }
 
 setupStaticIP(){
-	createStaticYAML
-	setIP
-	setGateway
-	setDNS
-	setMTU
-	netplan generate; netplan apply
-	echo; printStatus "NOTE: You can ignore warnings about the ovsdb-server.service not running."
+    # Get current settings first before asking for new ones
+    currentIP=$(listCoreIP)
+    currentGateway="$( getInternetInfo 3 )"
+    currentMTU="$( ip a | grep $ethInt | grep mtu | grep -v lo | awk '{for(i=1;i<=NF;i++)if($i=="mtu")print $(i+1)}' )"
+    currentDNS=$(cat /etc/resolv.conf | grep nameserver | cut -d " " -f2 | awk '{printf "%s,",$0} END {print ""}' | sed 's/.$//')
+    
+    # Initialize variables with current values if they exist
+    IP=${IP:-$currentIP}
+    GATEWAY=${GATEWAY:-$currentGateway}
+    MTU=${MTU:-$currentMTU}
+    NAMESERVERS=${NAMESERVERS:-$currentDNS}
+    
+    # Ask for new settings or confirm current ones
+    setIP
+    setGateway
+    setDNS
+    setMTU
+    
+    # Ensure we have values for critical variables before creating YAML
+    if [[ -z "$IP" ]]; then
+        printError "No IP address set. Cannot create network configuration."
+        return 1
+    fi
+    
+    if [[ -z "$ethInt" ]]; then
+        printError "No interface selected. Cannot create network configuration."
+        return 1
+    fi
+    
+    # Now recreate the YAML file with the updated settings
+    createStaticYAML
+    
+    # Apply the changes
+    netplan generate
+    netplan apply
+    echo; printStatus "NOTE: You can ignore warnings about the ovsdb-server.service not running."
 }
 
 # Display SOCKS proxies
@@ -836,108 +1018,256 @@ displayProxies(){
 
 # Setup SOCKS proxy
 setupSOCKS(){
-	# Check for dependencies
-	if ! which socat > /dev/null; then
-		echo; printError "The SOCKS proxy requires 'socat' it and will not be setup, exiting."
-		echo; printStatus "If online, you can install using the Install Redirector Tools option in the Utilities menu."
-		break
-	fi
-	if ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh > /dev/null; then
-		echo; printStatus "You currently have proxies running on the following ports:"
-		ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh
-		echo; printQuestion "Do you want to remove them? (y/N)"; read REPLY
-		if [[ $REPLY =~ ^[Yy]$ ]]; then
-			echo; printStatus "Killing previous setips SSH SOCKS proxies."
-			stopSOCKS
-		else
-			printStatus "Keeping existing proxies and continuing."
-		fi
-	fi
-	echo; printGood "Starting up SOCKS proxy..."
-	printStatus "The startup process will take ~5 secs."
-	echo "	You will be returned to the setips menu when setup is complete."
-	echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
-	while :; do
-		if ss -ltpn | grep "0.0.0.0:$proxyport "; then
-			echo; printError "Something is already listening on that port, please try a different port."
-			echo; ss -ltpn | grep ":$proxyport "
-			echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
-		else
-			break
-		fi
-	done
-	echo; printQuestion "What is root's key passphrase (or password if keys are not used)?"; read -s password
-	echo; printStatus "Checking if the SSH server is running..."
-	if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
-		printGood "SSH server *is* running; let's rock."
-	else
-		printError "SSH server *is not* running; starting it up."
-		service ssh start
-		sleep 2
-		echo; printStatus "Checking if the SSH server is running after we attempted to start it up..."
-		if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
-			printGood "SSH server *is* running; let's rock."
-		else
-			printError "SSH server *is not* running. #sadpanda"
-			break
-		fi
-	fi
+    # Check for dependencies
+    if ! which socat > /dev/null; then
+        echo; printError "The SOCKS proxy requires 'socat' it and will not be setup, exiting."
+        echo; printStatus "If online, you can install using the Install Redirector Tools option in the Utilities menu."
+        break
+    fi
+    
+    # Check for existing proxies
+    if ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh > /dev/null; then
+        echo; printStatus "You currently have proxies running on the following ports:"
+        ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh
+        echo; printQuestion "Do you want to remove them? (y/N)"; read REPLY
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo; printStatus "Killing previous setips SSH SOCKS proxies."
+            stopSOCKS
+        else
+            printStatus "Keeping existing proxies and continuing."
+        fi
+    fi
+    
+    # Setup SSH key
+    setupSSHKey
+    
+    echo; printGood "Starting up SOCKS proxy..."
+    printStatus "The startup process will take ~5 secs."
+    echo "    You will be returned to the setips menu when setup is complete."
+    
+    echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
+    while :; do
+        if ss -ltpn | grep "0.0.0.0:$proxyport "; then
+            echo; printError "Something is already listening on that port, please try a different port."
+            echo; ss -ltpn | grep ":$proxyport "
+            echo; printQuestion "What *PORT* do you want to use for your proxy?"; read proxyport
+        else
+            break
+        fi
+    done
+    
+    echo; printStatus "Checking if the SSH server is running..."
+    if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
+        printGood "SSH server *is* running; let's rock."
+    else
+        printError "SSH server *is not* running; starting it up."
+        service ssh start
+        sleep 2
+        echo; printStatus "Checking if the SSH server is running after we attempted to start it up..."
+        if ps aux | grep -v grep | grep /usr/sbin/sshd > /dev/null; then
+            printGood "SSH server *is* running; let's rock."
+        else
+            printError "SSH server *is not* running. #sadpanda"
+            break
+        fi
+    fi
 
-	checkSSH
+    checkSSH
 
-	echo; printStatus "Setting up the SSH SOCKS proxy...please wait..."
-	sshPort=`ss -ltpn | grep "sshd" | head -n 1 | cut -d":" -f2| cut -d" " -f1`
-	while :; do
-		(sleep 2; echo $password; sleep 2; echo ""; sleep 1) | socat - EXEC:"screen -S ssh ssh -o StrictHostKeyChecking=no -gD$proxyport -p $sshPort -l root localhost",pty,setsid,ctty > /dev/null
-		export autostartSOCKS="(sleep 2; echo $password; sleep 2; echo \"\"; sleep 1) | socat - EXEC:'screen -S ssh ssh -o StrictHostKeyChecking=no -p $sshPort -gD\"$proxyport\" -l root localhost',pty,setsid,ctty"
-		if ss -ltpn | grep -v grep | grep $proxyport > /dev/null; then
-			echo; printGood "SUCCESS...SOCKS proxy started on Port $proxyport."
-			echo $proxyport >> $setipsFolder/proxies.current
-			ss -ltpn | grep $proxyport
-			break
-		else
-			echo; printError "FAIL...looks like the SOCKS proxy didn't start correctly; try these possible fixes:"
-			echo '- Check your password and try running the script again.'
-			echo '- Type "screen -r" from the command line to see if the screened session has any errors.  Once in screen, type "Ctrl-D" to get back to original command line.'
-			echo
-			exit 1
-		fi
-	done
-	echo; echo "To use, copy the following to the end of your local /etc/proxychains.conf file (replace any other proxies in the file):"
-	displayProxies
+    echo; printStatus "Setting up the SSH SOCKS proxy...please wait..."
+    sshPort=`ss -ltpn | grep "sshd" | head -n 1 | cut -d":" -f2| cut -d" " -f1`
+    
+    # Start SSH SOCKS proxy using key authentication
+    screen -dmS ssh_socks ssh -i /root/.ssh/setips_proxy -o StrictHostKeyChecking=no -N -D 0.0.0.0:$proxyport -p $sshPort root@127.0.0.1
+    # Check if it started correctly
+    sleep 2
+    if ss -ltpn | grep -v grep | grep $proxyport > /dev/null; then
+        echo; printGood "SUCCESS...SOCKS proxy started on Port $proxyport."
+        ss -ltpn | grep $proxyport
+    else
+        echo; printError "FAIL...looks like the SOCKS proxy didn't start correctly."
+        echo "Try running the script again or check system logs for errors."
+        exit 1
+    fi
+    
+    echo; echo "To use, copy the following to the end of your local /etc/proxychains.conf file (replace any other proxies in the file):"
+    displayProxies
 
-	# Ask if you want to start the SOCKS proxy automatically on boot (careful, this will put your root password in a systemd unit file)
-	echo; printQuestion "Would you like the SOCKS proxy to start on reboot? (y/N)"; read REPLY
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		autoStartSOCKSProxy
-	fi
+	# Always restore socks proxies on reboot
+	autoStartSOCKSProxy
+
+    # Always turn ON IP table randomization when starting SOCKS proxy
+    iptablesToggleRandomSource ON
+    
+    # Always save iptables and ensure they restore on reboot
+    saveIPTables
+    autoStartIPTables
+    
+    echo; printGood "IP randomization enabled and iptables persistence configured."
+    echo; printGood "The SOCKS proxy will restore on reboot."
 }
 
-# Stop SOCKS proxy
+# Stop SOCKS proxy - improved version with reordered steps
 stopSOCKS(){
-	screen -ls |grep ssh|cut -d"." -f1|cut -b2- > /tmp/socks.tmp
-	while read p; do screen -X -S $p.ssh kill; done < /tmp/socks.tmp
-	rm -f /tmp/socks.tmp
-	systemctl disable autostart_socks.service
-	rm -f $setipsFolder/proxies.current
-}
-
-# Flush all current IPTable rules
-flushIPTables(){
-	tmp=`mktemp`
-	# Flushing all rules
-	$iptables -F
-	$iptables -X
-	$iptables -F -t nat
-	$iptables -X -t nat
-
-	# Setting default filter policy
-	$iptables -P INPUT ACCEPT
-	$iptables -P OUTPUT ACCEPT
-	$iptables -P FORWARD ACCEPT
-
-	# Remove MASQUERADE rules
-	iptables-save > $tmp; sed -i '/-o '$ethInt' -j MASQUERADE/ {d;}' $tmp; iptables-restore < $tmp; rm $tmp
+    echo "Stopping all SOCKS proxies..."
+    
+    # 1. First identify all running proxy processes and their ports
+    echo "Identifying all SOCKS proxy processes..."
+    proxy_processes=$(ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh)
+    
+    if [ -n "$proxy_processes" ]; then
+        echo "Found SOCKS proxy processes by port:"
+        echo "$proxy_processes"
+        
+        # Extract ports for use in systemd service removal
+        ports=$(echo "$proxy_processes" | grep -o "0.0.0.0:\([0-9]\+\)" | cut -d':' -f2 | sort -u)
+    fi
+    
+    # 2. Identify and disable all systemd services for SOCKS proxies
+    echo "Identifying and disabling all SOCKS proxy systemd services..."
+    
+    # Find any systemd services matching our naming pattern
+    service_ports=$(find /etc/systemd/system -name "socks_proxy_*.service" | grep -o '[0-9]\+\.service' | cut -d. -f1)
+    
+    # Combine with the ports we already found from running processes
+    if [ -n "$ports" ] && [ -n "$service_ports" ]; then
+        all_ports="$ports $service_ports"
+    elif [ -n "$ports" ]; then
+        all_ports="$ports"
+    else
+        all_ports="$service_ports"
+    fi
+    
+    # Stop and disable each service first
+    if [ -n "$all_ports" ]; then
+        for port in $all_ports; do
+            if [ -f "/etc/systemd/system/socks_proxy_${port}.service" ]; then
+                echo "Stopping and disabling service for port $port"
+                systemctl stop socks_proxy_${port}.service 2>/dev/null
+                systemctl disable socks_proxy_${port}.service 2>/dev/null
+            fi
+        done
+    fi
+    
+    # Also look for any other socks proxy services that might have different naming patterns
+    other_socks_services=$(find /etc/systemd/system -name "*socks*.service" -o -name "*proxy*.service")
+    for service in $other_socks_services; do
+        if grep -q "SOCKS" "$service" || grep -q "ssh.*-D" "$service"; then
+            echo "Found additional SOCKS service: $service"
+            service_name=$(basename $service)
+            systemctl stop $service_name 2>/dev/null
+            systemctl disable $service_name 2>/dev/null
+        fi
+    done
+    
+    # 3. Remove all systemd service files
+    echo "Removing all SOCKS proxy systemd service files..."
+    
+    if [ -n "$all_ports" ]; then
+        for port in $all_ports; do
+            if [ -f "/etc/systemd/system/socks_proxy_${port}.service" ]; then
+                echo "Removing service file for port $port"
+                rm -f "/etc/systemd/system/socks_proxy_${port}.service" 2>/dev/null
+            fi
+        done
+    fi
+    
+    # Remove any other identified SOCKS service files
+    for service in $other_socks_services; do
+        if grep -q "SOCKS" "$service" || grep -q "ssh.*-D" "$service"; then
+            echo "Removing additional service file: $service"
+            rm -f "$service" 2>/dev/null
+        fi
+    done
+    
+    # Force systemd to reload its configuration
+    systemctl daemon-reload
+    
+    # 4. Clean up the autostart proxy list file early
+    if [ -f "$setipsFolder/proxies.autostart" ]; then
+        echo "Removing autostart proxy configuration"
+        rm -f "$setipsFolder/proxies.autostart"
+    fi
+    
+    # 5. Turn OFF source IP randomization explicitly before killing processes
+    iptablesToggleRandomSource OFF
+    
+    # 6. Now terminate screen sessions related to SSH
+    if screen -ls | grep -q "\.ssh"; then
+        echo "Killing SOCKS proxy screen sessions..."
+        screen -ls | grep "\.ssh" | cut -d"." -f1 | awk '{print $1}' | while read pid; do
+            echo "Killing screen session: $pid.ssh"
+            screen -X -S $pid.ssh quit
+        done
+    fi
+    
+    # 7. Kill all processes identified earlier
+    if [ -n "$proxy_processes" ]; then
+        echo "Killing SOCKS proxy processes by PID..."
+        pids=$(echo "$proxy_processes" | grep -o 'pid=[0-9]*' | cut -d= -f2)
+        for pid in $pids; do
+            echo "Killing process $pid"
+            kill -9 $pid 2>/dev/null
+            sleep 0.5
+        done
+    fi
+    
+    # 8. Kill all SSH processes with -D option (Dynamic forwarding/SOCKS)
+    echo "Looking for SSH processes with dynamic forwarding..."
+    socks_ssh_pids=$(ps aux | grep ssh | grep -E '\-D' | grep -v grep | awk '{print $2}')
+    if [ -n "$socks_ssh_pids" ]; then
+        echo "Found SSH processes with dynamic forwarding:"
+        ps aux | grep ssh | grep -E '\-D' | grep -v grep
+        
+        for pid in $socks_ssh_pids; do
+            echo "Killing SSH process with dynamic forwarding: $pid"
+            kill -9 $pid 2>/dev/null
+            sleep 0.5
+        done
+    fi
+    
+    # 9. Explicitly kill any SSH process connecting to localhost (likely our SOCKS proxies)
+    echo "Looking for SSH processes connecting to localhost..."
+    local_ssh_pids=$(ps aux | grep ssh | grep -E 'root@127.0.0.1|root@localhost' | grep -v grep | awk '{print $2}')
+    if [ -n "$local_ssh_pids" ]; then
+        echo "Found SSH processes connecting to localhost:"
+        ps aux | grep ssh | grep -E 'root@127.0.0.1|root@localhost' | grep -v grep
+        
+        for pid in $local_ssh_pids; do
+            echo "Killing local SSH process: $pid"
+            kill -9 $pid 2>/dev/null
+            sleep 0.5
+        done
+    fi
+    
+    # 10. Final verification - check if any SSH SOCKS proxies remain
+    echo "Performing final verification..."
+    sleep 2  # Allow time for processes to terminate
+    
+    remaining_proxies=$(ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh)
+    if [ -n "$remaining_proxies" ]; then
+        echo "WARNING: Some SSH proxies still running after cleanup:"
+        echo "$remaining_proxies"
+        
+        # Force kill any remaining processes
+        pids=$(echo "$remaining_proxies" | grep -o 'pid=[0-9]*' | cut -d= -f2)
+        for pid in $pids; do
+            echo "Force killing stubborn process $pid"
+            kill -9 $pid 2>/dev/null
+        done
+        
+        # Final check
+        if ss -ltpn | grep -v grep | grep 0.0.0.0 | grep -v sshd | grep ssh > /dev/null; then
+            echo "ERROR: Failed to stop all SOCKS proxies. Manual intervention required."
+        else
+            echo "All SOCKS proxies successfully terminated after second attempt."
+        fi
+    else
+        echo "All SOCKS proxies successfully terminated."
+    fi
+    
+    # Cleanup any temporary files
+    rm -f /tmp/socks.tmp 2>/dev/null
 }
 
 cleanIPPivots(){
@@ -949,7 +1279,7 @@ cleanIPPivots(){
 iptablesToggleRandomSource(){
 	tmp=`mktemp`
 	# Check if current iptables is set to random source address
-	if [[ $2 == "OFF" || $(iptables-save | grep "SNAT") ]]; then 
+	if [[ $1 == "OFF" || $(iptables-save | grep "SNAT") ]]; then 
 		# Save off current iptables, delete all SNAT rules with the word "statistic", and restore the table
 		iptables-save > $tmp; sed -i "/SNAT/d" $tmp; iptables-restore < $tmp; rm $tmp
 		echo; printGood "Turned ** OFF ** outgoing source IP randomization."
@@ -964,18 +1294,27 @@ iptablesToggleRandomSource(){
 
 # Create systemd unit file to restore iptable rules on reboot
 autoStartIPTables(){
-	cat > /etc/systemd/system/restore_iptables.service << EOF
+    # First, make sure we have a current backup
+    if [ ! -f "$setipsFolder/iptables.current" ]; then
+        saveIPTables
+    fi
+    
+    cat > /etc/systemd/system/restore_iptables.service << EOF
 [Unit]
 Description="Restore iptable rules on reboot"
 After=network.target
 
 [Service]
-ExecStart=iptables-restore < $setipsFolder/iptables.current
+Type=oneshot
+ExecStart=/sbin/iptables-restore $setipsFolder/iptables.current
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
-	systemctl enable restore_iptables.service
+    systemctl daemon-reload
+    systemctl enable restore_iptables.service
+    echo; printGood "IPTables will be automatically restored at boot time"
 }
 
 # Remove systemd unit file to restore iptable rules on reboot
@@ -1335,9 +1674,12 @@ setAskEachTime(){
 }
 
 # Loop function to redisplay menu
+# Function to display menu - now with an option to suppress the question for submenu returns
 whatToDo(){
-	echo; printQuestion "What would you like to do next?"
-	echo "1)Setup  2)Subinterfaces  3)Utilities  4)View-Info  5)Quit"
+    # Clear any previous menu display for consistency
+    echo
+    echo "If needed, click Return for menu."
+    echo
 }
 
 # Start fully interactive mode (default when no options given or by adding "-i")
@@ -1384,7 +1726,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				cleanIPTables
 				saveIPTables
 				setupSOCKS
-				iptablesToggleRandomSource ON
 				break
 				;;
 
@@ -1414,7 +1755,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 			esac
 		done
-		whatToDo
+        whatToDo
 		;;
 
 		Subinterfaces )
@@ -1458,9 +1799,10 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				Main-Menu )
 				break
 				;;
+            
 			esac
 		done
-		whatToDo
+        whatToDo
 		;;
 
 		Utilities )
@@ -1565,7 +1907,6 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 
 				SOCKS-Proxy-REMOVE-ALL )
 				stopSOCKS
-				iptablesToggleRandomSource OFF
 				cleanIPTables
 				saveIPTables
 				autoStartIPTables
@@ -1578,7 +1919,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 			esac
 		done
-		whatToDo
+        whatToDo
 		;;
 
 		View-Info )
@@ -1614,7 +1955,7 @@ select ar in "Setup" "Subinterfaces" "Utilities" "View-Info" "Quit"; do
 				;;
 			esac
 		done
-		whatToDo
+        whatToDo
 		;;
 
 		Quit )
@@ -1641,26 +1982,32 @@ printGood "Configuration and logging directory:  $setipsFolder"
 # Check OS version
 osCheck
 
+# Process command-line arguments first
+if [[ "$1" == "-n" ]]; then
+    # Skip firstTime check for the -n option
+    :  # Null command (do nothing)
 # Ask to run interface setup or, if setup, collect information
-if [[ ! -f $setipsFolder/setupComplete ]]; then
-	firstTime
-	touch $setipsFolder/setupComplete
+else
+    if [[ ! -f $setipsFolder/setupComplete ]]; then
+        firstTime
+        touch $setipsFolder/setupComplete
+    fi
+
+    # Determine the operational mode - ONLINE or OFFLINE
+    opMode
+
+    # Check for iptables backup folder
+    if [[ ! -d $iptablesBackup ]]; then
+        mkdir -p $iptablesBackup
+    fi
+
+    # Check for pivotRules backup folder
+    if [[ ! -d $pivotRulesBackup ]]; then
+        mkdir -p $pivotRulesBackup
+    fi
 fi
 
-# Determine the operational mode - ONLINE or OFFLINE
-opMode
-
-# Check for iptables backup folder
-if [[ ! -d $iptablesBackup ]]; then
-	mkdir -p $iptablesBackup
-fi
-
-# Check for pivotRules backup folder
-if [[ ! -d $pivotRulesBackup ]]; then
-	mkdir -p $pivotRulesBackup
-fi
-
-# Checking ssh service is turned on and enabled for password login (Added for Don *grin*)
+# Checking ssh service is turned on and enabled for password login
 checkSSH
 
 if [[ $1 == "help" || $1 == "--help" ]]; then
@@ -1763,23 +2110,54 @@ else
 		(l) # List current IPTables rules
 			displayIPTables >&2
 			;;
-		(n) # New redirector setup
-			echo; printStatus "Setting up this server as a setips redirector."
-			# Install redirector tools
-			echo; printStatus "*IMPORTANT* For redirectors, there are several tools we need to install."
-			if [[ $internet == "0" ]]; then
-				echo; printError "You can not setup this redirector unless you can access a repo."
-				echo; printQuestion "Would you like the try anyway? (Y/n)"; read REPLY
-				if [[ $REPLY =~ ^[Nn]$ ]]; then
-					echo; printError "Exiting."
-					exit 1
-				fi
+		(n) # New setup - restore to default state
+			echo; printStatus "Restoring this endpoint to a default state..."
+			
+            # Stop services
+            stopSocatPivot
+            stopSOCKS
+            cleanIPTables
+            saveIPTables
+            
+			# Remove the setips-files folder
+			rm -rf $setipsFolder
+			
+			# Create the setips-files folder with only an empty log file and basic config
+			mkdir -p $setipsFolder
+			touch "$setipsFolder/setips.log"
+			createConfig
+
+			# Create a basic DHCP netplan configuration
+			if [[ -f /etc/netplan/setips-network.yaml ]]; then
+				# Backup existing config first
+				cp /etc/netplan/setips-network.yaml /etc/netplan/setips-network.yaml.bak
 			fi
-			installRedirTools
-			echo; printGood "Setup complete."
-			# Remove the setupComplete flag to force the firstTime script to run on next start
-			rm -f $setipsFolder/setupComplete > /dev/null 2>&1
-			echo "" > $setipsFolder/setips.log
+			
+			# Detect primary interface if possible
+			primaryInterface=$(ip route | grep default | awk '{print $5}' | head -n 1)
+			# If no interface found, use ethInt from config or just "eth0" as fallback
+			primaryInterface=${primaryInterface:-${ethInt:-eth0}}
+			
+			# Create DHCP config
+			cat > /etc/netplan/setips-network.yaml << EOF
+network:
+  version: 2
+  ethernets:
+    $primaryInterface:
+      dhcp4: true
+      dhcp-identifier: mac
+EOF
+			
+			# Set proper permissions
+			chmod 600 /etc/netplan/setips-network.yaml
+			
+			# Apply the configuration
+			netplan generate
+			netplan apply
+			
+			echo; printGood "Endpoint restored to default state with DHCP enabled."
+			echo; printGood "When you next run setips.sh, it will perform first-time setup."
+			exit 0
 			;;
 		(o) # IMPORT - Setup 1:1 redirector
 			if [[ $# -lt $((OPTIND)) ]]; then

@@ -1,6 +1,10 @@
 # setips.sh RELEASE NOTES
 
 ## Current Version
+Version: '3.4 (2025Apr06-2116)'
+- CyberX2025 Version
+- Cleaned code; refactored YAML
+
 Version: '3.3 (2024Apr12-0133)'
 - CyberX2024 Version
 - Updated redirector tools (libreadline5 -> readline-common)
